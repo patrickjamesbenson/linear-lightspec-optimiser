@@ -2,7 +2,7 @@ import io
 import zipfile
 
 def parse_ies_file(uploaded_file):
-    # Dummy data for demo - parse your actual IES here
+    # Dummy data for now (replace with real parser)
     return {
         "luminaire_name": "BLine 8585D 11.6W - 80CRI - 3000K",
         "length_m": 1.0,
@@ -11,10 +11,10 @@ def parse_ies_file(uploaded_file):
         "efficacy": 129.31
     }
 
-def validate_lengths(desired_length_m, end_plate_mm, led_pitch_mm):
+def validate_lengths(desired_length_m, end_plate_mm=5.5, led_pitch_mm=56.0):
     min_length_mm = 571
     end_total_mm = end_plate_mm * 2
-    usable_length_mm = desired_length_m * 1000 - end_total_mm
+    usable_length_mm = (desired_length_m * 1000) - end_total_mm
     board_count = round(usable_length_mm / led_pitch_mm)
 
     shorter_mm = (board_count - 1) * led_pitch_mm + end_total_mm
@@ -37,11 +37,11 @@ def calculate_recommendations(ies_data, achieved_lux, target_lux, efficiency_gai
         "length_m": length_choice_m
     }
 
-def generate_ies_files_zip(rec, end_plate_mm, led_pitch_mm):
-    # Placeholder for actual IES generation
+def generate_ies_files_zip(results, end_plate_mm, led_pitch_mm):
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
-        for length in [1.0, 2.0, 4.5]:
+        for rec in results:
+            length = rec['length_m']
             filename = f"BLine_{length:.3f}m_Optimised.ies"
             content = f"""IESNA:LM-63-2002
 [MANUFAC] Evolt
