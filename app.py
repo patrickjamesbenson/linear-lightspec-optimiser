@@ -114,11 +114,19 @@ if uploaded_file:
 
     if st.session_state['lengths_list']:
         product_tiers_found = set()
+
+        # Table headers
+        header_cols = st.columns([1, 2, 2, 2, 2, 2, 2, 2])
+        header_labels = ["", "Length (m)", "Lumens/m", "Watts/m", "Total Lumens", "Total Watts", "lm/W", "Product Tier"]
+
+        for col, label in zip(header_cols, header_labels):
+            col.markdown(f"**{label}**")
+
+        # Rows
         for idx, length in enumerate(st.session_state['lengths_list']):
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
-            # Product tier rules
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
@@ -130,30 +138,30 @@ if uploaded_file:
 
             product_tiers_found.add(tier)
 
-            cols = st.columns([1, 4, 4, 4, 4, 4, 4, 4])
-            with cols[0]:
-                if st.button("🗑️", key=f"del_{idx}"):
-                    st.session_state['lengths_list'].pop(idx)
-                    st.experimental_rerun()
-            with cols[1]:
-                st.write(f"{length:.3f} m")
-            with cols[2]:
-                st.write(f"{new_lm_per_m:.1f}")
-            with cols[3]:
-                st.write(f"{new_w_per_m:.1f}")
-            with cols[4]:
-                st.write(f"{total_lumens:.1f}")
-            with cols[5]:
-                st.write(f"{total_watts:.1f}")
-            with cols[6]:
-                st.write(f"{new_lm_per_w:.1f}")
-            with cols[7]:
-                st.write(f"{tier}")
+            row_cols = st.columns([1, 2, 2, 2, 2, 2, 2, 2])
+
+            # Delete button
+            if row_cols[0].button("🗑️", key=f"del_{idx}"):
+                st.session_state['lengths_list'].pop(idx)
+                st.experimental_rerun()
+
+            row_data = [
+                f"{length:.3f}",
+                f"{new_lm_per_m:.1f}",
+                f"{new_w_per_m:.1f}",
+                f"{total_lumens:.1f}",
+                f"{total_watts:.1f}",
+                f"{new_lm_per_w:.1f}",
+                f"{tier}"
+            ]
+
+            for col, val in zip(row_cols[1:], row_data):
+                col.write(val)
 
         if len(product_tiers_found) > 1:
             st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
 
-        # CSV download button
+        # Download CSV button
         df = pd.DataFrame([{
             "Length (m)": f"{length:.3f}",
             "Lumens/m": f"{new_lm_per_m:.1f}",
