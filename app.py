@@ -106,7 +106,6 @@ if uploaded_file:
     shorter_length_m = round(min_length_mm / 1000, 3)
     longer_length_m = round(max_length_mm / 1000, 3)
 
-    # === STACKED BUTTONS ===
     if st.button(f"Add Shorter Buildable Length: {shorter_length_m:.3f} m", key=f"short_{shorter_length_m}"):
         st.session_state['lengths_list'].append(shorter_length_m)
 
@@ -137,7 +136,6 @@ if uploaded_file:
     base_lm_per_m = 400.0
     base_w_per_m = float(param_data.get("Input Watts", 11.6))
 
-    # === EFFICIENCY GAIN REDUCES WATTS ===
     efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
     new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
     new_lm_per_m = round(base_lm_per_m, 1)
@@ -149,7 +147,6 @@ if uploaded_file:
 
         length_table_data = []
 
-        # Decide if End Plate & Pitch need to be shown
         show_end_plate_pitch = (
             st.session_state['end_plate_thickness'] != 5.5 or
             st.session_state['led_pitch'] != 56.0
@@ -200,27 +197,26 @@ if uploaded_file:
 
     st.table(comparison_df.style.format(precision=1).set_properties(**{'text-align': 'right'}))
 
-    # === GENERATE OPTIMISED IES FILES & DOWNLOAD ===
+    # === SINGLE ACTION: GENERATE OPTIMISED IES FILES & DOWNLOAD ZIP ===
     st.markdown("## Generate Optimised IES Files")
 
     if st.session_state['lengths_list']:
-        if st.button("Generate IES Files & Download ZIP"):
-            files_to_zip = {}
+        files_to_zip = {}
 
-            for length in st.session_state['lengths_list']:
-                scaled_data = modify_candela_data(parsed['data'], 1.0)
-                new_file = create_ies_file(parsed['header'], scaled_data)
-                filename = f"Optimised_{length:.3f}m.ies"
-                files_to_zip[filename] = new_file
+        for length in st.session_state['lengths_list']:
+            scaled_data = modify_candela_data(parsed['data'], 1.0)
+            new_file = create_ies_file(parsed['header'], scaled_data)
+            filename = f"Optimised_{length:.3f}m.ies"
+            files_to_zip[filename] = new_file
 
-            zip_buffer = create_zip(files_to_zip)
+        zip_buffer = create_zip(files_to_zip)
 
-            st.download_button(
-                "Download ZIP of IES Files",
-                zip_buffer,
-                file_name="Optimised_IES_Files.zip",
-                mime="application/zip"
-            )
+        st.download_button(
+            label="Generate IES Files & Download ZIP",
+            data=zip_buffer,
+            file_name="Optimised_IES_Files.zip",
+            mime="application/zip"
+        )
 
 else:
     st.info("Upload an IES file to begin optimisation.")
