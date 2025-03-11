@@ -5,7 +5,7 @@ from utils import parse_ies_file, modify_candela_data, create_ies_file, create_z
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 
 def splash_screen():
-    st.image("assets/splash_screen.png", use_column_width=True)
+    st.image("assets/splash_screen.png", use_container_width=True)
     st.markdown("<h1 style='text-align: center;'>Evolt - So much more than light</h1>", unsafe_allow_html=True)
 
 # Splash Screen
