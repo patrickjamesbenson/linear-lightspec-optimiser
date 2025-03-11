@@ -122,10 +122,11 @@ if uploaded_file:
 
     efficiency_reason = st.text_input(
         "Reason (e.g., Gen 2 LED +15% increase lumen output)",
-        value=st.session_state.get('efficiency_reason', '')
+        value=st.session_state.get('efficiency_reason', 'Current Generation')
     )
 
-    if led_efficiency_gain_percent != 0 and efficiency_reason.strip() == "":
+    # Require reason if adjustment is made
+    if led_efficiency_gain_percent != 0 and (efficiency_reason.strip() == "" or efficiency_reason == "Current Generation"):
         st.error("⚠️ You must provide a reason for the LED Chipset Adjustment before proceeding.")
         st.stop()
 
@@ -152,6 +153,11 @@ if uploaded_file:
             st.session_state['led_pitch'] != 56.0
         )
 
+        show_chipset_reason = (
+            led_efficiency_gain_percent != 0 or
+            efficiency_reason != "Current Generation"
+        )
+
         for length in st.session_state['lengths_list']:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
@@ -162,10 +168,12 @@ if uploaded_file:
                 "Watts/m": f"{new_w_per_m:.1f}",
                 "Total Lumens": f"{total_lumens:.1f}",
                 "Total Watts": f"{total_watts:.1f}",
-                "lm/W": f"{new_lm_per_w:.1f}",
-                "Chipset Adj. (%)": f"{led_efficiency_gain_percent:.1f}",
-                "Reason": efficiency_reason
+                "lm/W": f"{new_lm_per_w:.1f}"
             }
+
+            if show_chipset_reason:
+                row["Chipset Adj. (%)"] = f"{led_efficiency_gain_percent:.1f}"
+                row["Reason"] = efficiency_reason
 
             if show_end_plate_pitch:
                 row["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
@@ -197,7 +205,7 @@ if uploaded_file:
 
     st.table(comparison_df.style.format(precision=1).set_properties(**{'text-align': 'right'}))
 
-    # === SINGLE ACTION: GENERATE OPTIMISED IES FILES & DOWNLOAD ZIP ===
+    # === GENERATE OPTIMISED IES FILES & DOWNLOAD ===
     st.markdown("## Generate Optimised IES Files")
 
     if st.session_state['lengths_list']:
