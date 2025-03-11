@@ -1,13 +1,10 @@
 import streamlit as st
 import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
-# === STREAMLIT PAGE CONFIG ===
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
 
-# === UPLOAD IES FILE ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
 if uploaded_file:
@@ -117,12 +114,11 @@ if uploaded_file:
 
     if st.session_state['lengths_list']:
         product_tiers_found = set()
-        table_rows = []
-
-        for length in st.session_state['lengths_list']:
+        for idx, length in enumerate(st.session_state['lengths_list']):
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
+            # Product tier rules
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
@@ -134,55 +130,41 @@ if uploaded_file:
 
             product_tiers_found.add(tier)
 
-            row = {
-                "Length (m)": f"{length:.3f}",
-                "Lumens/m": f"{new_lm_per_m:.1f}",
-                "Watts/m": f"{new_w_per_m:.1f}",
-                "Total Lumens": f"{total_lumens:.1f}",
-                "Total Watts": f"{total_watts:.1f}",
-                "lm/W": f"{new_lm_per_w:.1f}",
-                "Product Tier": tier
-            }
-
-            if led_efficiency_gain_percent != 0:
-                row["Chipset Adj. (%)"] = f"{led_efficiency_gain_percent:.1f}"
-                row["Reason"] = efficiency_reason
-
-            if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
-                row["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
-                row["LED Series Pitch (mm)"] = f"{st.session_state['led_pitch']:.1f}"
-
-            table_rows.append(row)
-
-        df = pd.DataFrame(table_rows)
-
-        gb = GridOptionsBuilder.from_dataframe(df)
-        gb.configure_selection('multiple', use_checkbox=True)
-        gb.configure_grid_options(domLayout='normal')
-
-        grid_response = AgGrid(
-            df,
-            gridOptions=gb.build(),
-            update_mode=GridUpdateMode.SELECTION_CHANGED,
-            height=(len(df) * 35 + 50),
-            allow_unsafe_jscode=True
-        )
-
-        selected_rows = grid_response.get('selected_rows', [])
-
-        # Defensive check: selected_rows is a list of dicts
-        if selected_rows and isinstance(selected_rows, list) and len(selected_rows) > 0:
-            delete_button_label = f"🗑️ Delete Selected Length(s) ({len(selected_rows)} Selected)"
-            if st.button(delete_button_label):
-                lengths_to_delete = [float(r['Length (m)']) for r in selected_rows]
-                st.session_state['lengths_list'] = [
-                    l for l in st.session_state['lengths_list']
-                    if round(l, 3) not in [round(ld, 3) for ld in lengths_to_delete]
-                ]
-                st.experimental_rerun()
+            cols = st.columns([1, 4, 4, 4, 4, 4, 4, 4])
+            with cols[0]:
+                if st.button("🗑️", key=f"del_{idx}"):
+                    st.session_state['lengths_list'].pop(idx)
+                    st.experimental_rerun()
+            with cols[1]:
+                st.write(f"{length:.3f} m")
+            with cols[2]:
+                st.write(f"{new_lm_per_m:.1f}")
+            with cols[3]:
+                st.write(f"{new_w_per_m:.1f}")
+            with cols[4]:
+                st.write(f"{total_lumens:.1f}")
+            with cols[5]:
+                st.write(f"{total_watts:.1f}")
+            with cols[6]:
+                st.write(f"{new_lm_per_w:.1f}")
+            with cols[7]:
+                st.write(f"{tier}")
 
         if len(product_tiers_found) > 1:
             st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
+
+        # CSV download button
+        df = pd.DataFrame([{
+            "Length (m)": f"{length:.3f}",
+            "Lumens/m": f"{new_lm_per_m:.1f}",
+            "Watts/m": f"{new_w_per_m:.1f}",
+            "Total Lumens": f"{round(new_lm_per_m * length, 1)}",
+            "Total Watts": f"{round(new_w_per_m * length, 1)}",
+            "lm/W": f"{new_lm_per_w:.1f}",
+            "Product Tier": "Bespoke" if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0 else
+                            "Professional" if led_efficiency_gain_percent != 0 else
+                            "Advanced" if st.session_state['led_pitch'] % 4 != 0 else "Core"
+        } for length in st.session_state['lengths_list']])
 
         st.download_button(
             "Download CSV Summary",
