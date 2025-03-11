@@ -126,25 +126,22 @@ if uploaded_file:
         value=st.session_state.get('efficiency_reason', '')
     )
 
-    # FORCE reason if adjustment is not zero
     if led_efficiency_gain_percent != 0 and efficiency_reason.strip() == "":
         st.error("⚠️ You must provide a reason for the LED Chipset Adjustment before proceeding.")
         st.stop()
-    else:
-        st.session_state['led_efficiency_gain_percent'] = led_efficiency_gain_percent
-        st.session_state['efficiency_reason'] = efficiency_reason
 
-    # === Base lumens/watts from IES ===
-    base_lm_per_m = 400  # Example; replace with actual extracted value
-    base_w_per_m = 11.6  # Example; replace with actual extracted value from param_data["Input Watts"]
+    st.session_state['led_efficiency_gain_percent'] = led_efficiency_gain_percent
+    st.session_state['efficiency_reason'] = efficiency_reason
 
-    # === Efficiency Gain Reduces Watts ===
-    efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100)
-    st.session_state['efficiency_multiplier'] = efficiency_multiplier
+    # === BASE LUMENS/WATTS FROM IES ===
+    base_lm_per_m = 400.0  # Example default, replace with parsed data!
+    base_w_per_m = float(param_data.get("Input Watts", 11.6))  # Extracted from IES file!
 
-    new_w_per_m = base_w_per_m * efficiency_multiplier
-    new_lm_per_m = base_lm_per_m  # Stays the same
-    new_lm_per_w = new_lm_per_m / new_w_per_m if new_w_per_m else 0
+    # === EFFICIENCY GAIN REDUCES WATTS ===
+    efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
+    new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
+    new_lm_per_m = round(base_lm_per_m, 1)  # stays fixed
+    new_lm_per_w = round(new_lm_per_m / new_w_per_m, 1) if new_w_per_m != 0 else 0.0
 
     # === SELECTED LENGTHS TABLE ===
     if st.session_state['lengths_list']:
@@ -153,26 +150,25 @@ if uploaded_file:
         length_table_data = []
 
         for length in st.session_state['lengths_list']:
-            total_lumens = new_lm_per_m * length
-            total_watts = new_w_per_m * length
+            total_lumens = round(new_lm_per_m * length, 1)
+            total_watts = round(new_w_per_m * length, 1)
 
             length_table_data.append({
-                "Length (m)": length,
-                "Lumens per Metre": f"{new_lm_per_m:.2f}",
-                "Watts per Metre": f"{new_w_per_m:.2f}",
-                "Total Lumens (lm)": f"{total_lumens:.2f}",
-                "Total Watts (W)": f"{total_watts:.2f}",
-                "lm/W": f"{new_lm_per_w:.2f}",
-                "End Plate (mm)": st.session_state['end_plate_thickness'],
-                "LED Series Pitch (mm)": st.session_state['led_pitch'],
-                "LED Chipset Adjustment": f"{led_efficiency_gain_percent:.2f}%",
-                "LED Multiplier Reason": efficiency_reason,
-                "Product Tier": "Professional"
+                "Length (m)": f"{length:.1f}",
+                "Lumens per Metre": f"{new_lm_per_m:.1f}",
+                "Watts per Metre": f"{new_w_per_m:.1f}",
+                "Total Lumens (lm)": f"{total_lumens:.1f}",
+                "Total Watts (W)": f"{total_watts:.1f}",
+                "lm/W": f"{new_lm_per_w:.1f}",
+                "End Plate (mm)": f"{st.session_state['end_plate_thickness']:.1f}",
+                "LED Series Pitch (mm)": f"{st.session_state['led_pitch']:.1f}",
+                "LED Chipset Adj. (%)": f"{led_efficiency_gain_percent:.1f}",
+                "Reason": efficiency_reason
             })
 
         lengths_df = pd.DataFrame(length_table_data)
 
-        st.table(lengths_df)
+        st.table(lengths_df.style.format(precision=1).set_properties(**{'text-align': 'right'}))
 
         st.download_button(
             "Download CSV Summary",
@@ -188,11 +184,11 @@ if uploaded_file:
 
     comparison_df = pd.DataFrame({
         "Metric": ["Lumens per Metre", "Watts per Metre", "lm/W"],
-        "Base": [f"{base_lm_per_m:.2f}", f"{base_w_per_m:.2f}", f"{base_lm_per_m / base_w_per_m:.2f}"],
-        "Optimised": [f"{new_lm_per_m:.2f}", f"{new_w_per_m:.2f}", f"{new_lm_per_w:.2f}"]
+        "Base": [f"{base_lm_per_m:.1f}", f"{base_w_per_m:.1f}", f"{base_lm_per_m / base_w_per_m:.1f}"],
+        "Optimised": [f"{new_lm_per_m:.1f}", f"{new_w_per_m:.1f}", f"{new_lm_per_w:.1f}"]
     })
 
-    st.table(comparison_df)
+    st.table(comparison_df.style.format(precision=1).set_properties(**{'text-align': 'right'}))
 
     # === GENERATE OPTIMISED IES FILES ===
     st.markdown("## Generate Optimised IES Files")
@@ -204,7 +200,7 @@ if uploaded_file:
             for length in st.session_state['lengths_list']:
                 scaled_data = modify_candela_data(parsed['data'], 1.0)  # No candela change right now
                 new_file = create_ies_file(parsed['header'], scaled_data)
-                filename = f"Optimised_{length:.2f}m.ies"
+                filename = f"Optimised_{length:.1f}m.ies"
                 files_to_zip[filename] = new_file
 
             zip_buffer = create_zip(files_to_zip)
