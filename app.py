@@ -58,12 +58,11 @@ if uploaded_file:
     with st.expander("📂 Base Build Methodology", expanded=False):
 
         if 'locked' not in st.session_state:
-            st.session_state['locked'] = True  # ✅ Starts locked!
+            st.session_state['locked'] = True
             st.session_state['lengths_list'] = []
             st.session_state['end_plate_thickness'] = 5.5
             st.session_state['led_pitch'] = 56.0
 
-        # Toggle Button for Lock/Unlock
         if st.session_state['locked']:
             if st.button("🔓 Unlock Base Build Methodology"):
                 st.session_state['locked'] = False
@@ -71,13 +70,10 @@ if uploaded_file:
             if st.button("🔒 Lock Base Build Methodology"):
                 st.session_state['locked'] = True
 
-        # If Locked
         if st.session_state['locked']:
             end_plate_thickness = st.session_state['end_plate_thickness']
             led_pitch = st.session_state['led_pitch']
             st.info(f"🔒 Locked: End Plate Expansion Gutter = {end_plate_thickness} mm | LED Series Module Pitch = {led_pitch} mm")
-
-        # If Unlocked
         else:
             st.warning("⚠️ Adjust these only if you understand the impact on manufacturability.")
 
@@ -97,34 +93,6 @@ if uploaded_file:
 
             st.session_state['end_plate_thickness'] = end_plate_thickness
             st.session_state['led_pitch'] = led_pitch
-
-    # === LENGTH VALIDATION ===
-    st.markdown("## Length Validation")
-
-    desired_length_m = st.number_input("Desired Length (m)", min_value=0.5, value=1.0, step=0.1)
-    desired_length_mm = desired_length_m * 1000
-
-    min_length_mm = (int((desired_length_mm - st.session_state['end_plate_thickness'] * 2) / st.session_state['led_pitch'])) * st.session_state['led_pitch'] + st.session_state['end_plate_thickness'] * 2
-    max_length_mm = min_length_mm + st.session_state['led_pitch']
-
-    st.success(f"Shorter Buildable Length: {min_length_mm / 1000:.3f}m")
-    st.success(f"Longer Buildable Length: {max_length_mm / 1000:.3f}m")
-
-    # Add Length Buttons
-    if st.button("Add Shorter Length"):
-        st.session_state['lengths_list'].append(round(min_length_mm / 1000, 3))
-
-    if st.button("Add Longer Length"):
-        st.session_state['lengths_list'].append(round(max_length_mm / 1000, 3))
-
-    if st.session_state['lengths_list']:
-        st.markdown("### Selected Lengths for IES Generation")
-        lengths_df = pd.DataFrame({
-            "Selected Lengths (m)": st.session_state['lengths_list']
-        })
-        st.table(lengths_df)
-    else:
-        st.info("No lengths selected yet.")
 
     # === LIGHTING DESIGN EFFICIENCY OPTIMISATION ===
     st.markdown("## Lighting Design Efficiency Optimisation")
@@ -149,11 +117,75 @@ if uploaded_file:
     st.markdown("## Product Tier Feedback (Draft Mode)")
     st.info("🛠️ Draft: Based on your inputs, this system suggests 'Professional' tier.")
 
+    # === SELECT LENGTHS SECTION ===
+    st.markdown("## Select Lengths")
+
+    desired_length_m = st.number_input("Desired Length (m)", min_value=0.5, value=1.0, step=0.1)
+    desired_length_mm = desired_length_m * 1000
+
+    min_length_mm = (int((desired_length_mm - st.session_state['end_plate_thickness'] * 2) / st.session_state['led_pitch'])) * st.session_state['led_pitch'] + st.session_state['end_plate_thickness'] * 2
+    max_length_mm = min_length_mm + st.session_state['led_pitch']
+
+    shorter_length_m = round(min_length_mm / 1000, 3)
+    longer_length_m = round(max_length_mm / 1000, 3)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button(f"Add Shorter Buildable Length: {shorter_length_m} m", key=f"short_{shorter_length_m}"):
+            st.session_state['lengths_list'].append(shorter_length_m)
+
+    with col2:
+        if st.button(f"Add Longer Buildable Length: {longer_length_m} m", key=f"long_{longer_length_m}"):
+            st.session_state['lengths_list'].append(longer_length_m)
+
+    if st.session_state['lengths_list']:
+        st.markdown("### Selected Lengths for IES Generation")
+
+        # Base placeholders
+        base_lm_per_m = 400  # Placeholder
+        base_w_per_m = 20    # Placeholder
+
+        length_table_data = []
+
+        for length in st.session_state['lengths_list']:
+            lm_per_m = base_lm_per_m * recommended_factor * efficiency_multiplier
+            w_per_m = base_w_per_m * recommended_factor
+            total_lumens = lm_per_m * length
+            total_watts = w_per_m * length
+
+            length_table_data.append({
+                "Length (m)": length,
+                "Lumens per Metre": f"{lm_per_m:.2f}",
+                "Watts per Metre": f"{w_per_m:.2f}",
+                "Total Lumens (lm)": f"{total_lumens:.2f}",
+                "Total Watts (W)": f"{total_watts:.2f}",
+                "End Plate (mm)": st.session_state['end_plate_thickness'],
+                "LED Series Pitch (mm)": st.session_state['led_pitch'],
+                "LED Chipset Adjustment": f"{efficiency_multiplier:.2f}",
+                "LED Multiplier Reason": efficiency_reason if efficiency_reason else "-",
+                "Product Tier": "Professional"
+            })
+
+        lengths_df = pd.DataFrame(length_table_data)
+
+        st.table(lengths_df)
+
+        st.download_button(
+            "Download CSV Summary",
+            data=lengths_df.to_csv(index=False).encode('utf-8'),
+            file_name="Selected_Lengths_Summary.csv",
+            mime="text/csv"
+        )
+
+    else:
+        st.info("No lengths selected yet. Click a button above to add lengths.")
+
     # === COMPARISON TABLE ===
     st.markdown("## Comparison Table: Base vs Optimised")
 
-    base_lm_per_m = 400  # Placeholder
-    base_w_per_m = 20    # Placeholder
+    base_lm_per_m = 400
+    base_w_per_m = 20
 
     new_lm_per_m = base_lm_per_m * recommended_factor * efficiency_multiplier
     new_w_per_m = base_w_per_m * recommended_factor
@@ -187,28 +219,6 @@ if uploaded_file:
                 file_name="Optimised_IES_Files.zip",
                 mime="application/zip"
             )
-
-    # === CSV SUMMARY ===
-    st.markdown("## CSV Summary")
-
-    if st.session_state['lengths_list']:
-        csv_summary = pd.DataFrame({
-            "Length (m)": st.session_state['lengths_list'],
-            "Lumens per Metre": [new_lm_per_m] * len(st.session_state['lengths_list']),
-            "Watts per Metre": [new_w_per_m] * len(st.session_state['lengths_list']),
-            "LED Pitch (mm)": [st.session_state['led_pitch']] * len(st.session_state['lengths_list']),
-            "End Plate (mm)": [st.session_state['end_plate_thickness']] * len(st.session_state['lengths_list']),
-            "Efficiency Reason": [efficiency_reason] * len(st.session_state['lengths_list'])
-        })
-
-        st.dataframe(csv_summary)
-
-        st.download_button(
-            "Download CSV Summary",
-            data=csv_summary.to_csv(index=False).encode('utf-8'),
-            file_name="Optimised_Summary.csv",
-            mime="text/csv"
-        )
 
 else:
     st.info("Upload an IES file to begin optimisation.")
