@@ -2,19 +2,15 @@ import streamlit as st
 import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
 
-# === STREAMLIT PAGE CONFIG ===
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
-
 st.title("Linear LightSpec Optimiser")
 
-# === UPLOAD IES FILE ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
 
-    # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
         ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found")
         test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
@@ -45,18 +41,14 @@ if uploaded_file:
                 "Units Type", "Width (m)", "Length (m)", "Height (m)",
                 "Ballast Factor", "Future Use", "Input Watts"
             ]
-
             param_data = {label: value for label, value in zip(param_labels, photometric_params[:13])}
 
             st.markdown("### Photometric Parameters")
             st.table(pd.DataFrame.from_dict(param_data, orient='index', columns=['Value']))
-
         else:
             st.warning("Photometric Parameters not found or incomplete.")
 
-    # === BASE BUILD METHODOLOGY ===
     with st.expander("📂 Base Build Methodology", expanded=False):
-
         if 'locked' not in st.session_state:
             st.session_state['locked'] = True
             st.session_state['lengths_list'] = []
@@ -71,35 +63,16 @@ if uploaded_file:
                 st.session_state['locked'] = True
 
         if st.session_state['locked']:
-            end_plate_thickness = st.session_state['end_plate_thickness']
-            led_pitch = st.session_state['led_pitch']
-            st.info(f"🔒 Locked: End Plate Expansion Gutter = {end_plate_thickness} mm | LED Series Module Pitch = {led_pitch} mm")
+            st.info(f"🔒 Locked: End Plate = {st.session_state['end_plate_thickness']} mm | LED Pitch = {st.session_state['led_pitch']} mm")
         else:
             st.warning("⚠️ Adjust these only if you understand the impact on manufacturability.")
+            st.session_state['end_plate_thickness'] = st.number_input("End Plate Expansion Gutter (mm)", min_value=0.0, value=st.session_state['end_plate_thickness'], step=0.1)
+            st.session_state['led_pitch'] = st.number_input("LED Series Module Pitch (mm)", min_value=14.0, value=st.session_state['led_pitch'], step=0.1)
 
-            end_plate_thickness = st.number_input(
-                "End Plate Expansion Gutter (mm)",
-                min_value=0.0,
-                value=st.session_state['end_plate_thickness'],
-                step=0.1
-            )
-
-            led_pitch = st.number_input(
-                "LED Series Module Pitch (mm)",
-                min_value=14.0,
-                value=st.session_state['led_pitch'],
-                step=0.1
-            )
-
-            st.session_state['end_plate_thickness'] = end_plate_thickness
-            st.session_state['led_pitch'] = led_pitch
-
-    # === SELECT LENGTHS ===
     st.markdown("## Select Lengths")
 
     desired_length_m = st.number_input("Desired Length (m)", min_value=0.5, value=1.000, step=0.001, format="%.3f")
     desired_length_mm = desired_length_m * 1000
-
     min_length_mm = (int((desired_length_mm - st.session_state['end_plate_thickness'] * 2) / st.session_state['led_pitch'])) * st.session_state['led_pitch'] + st.session_state['end_plate_thickness'] * 2
     max_length_mm = min_length_mm + st.session_state['led_pitch']
 
@@ -112,20 +85,11 @@ if uploaded_file:
     if st.button(f"Add Longer Buildable Length: {longer_length_m:.3f} m", key=f"long_{longer_length_m}"):
         st.session_state['lengths_list'].append(longer_length_m)
 
-    # === LED CHIPSET ADJUSTMENT ===
     st.markdown("## LED Chipset Adjustment")
 
-    led_efficiency_gain_percent = st.number_input(
-        "LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0,
-        value=st.session_state.get('led_efficiency_gain_percent', 0.0), step=1.0
-    )
+    led_efficiency_gain_percent = st.number_input("LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0, value=st.session_state.get('led_efficiency_gain_percent', 0.0), step=1.0)
+    efficiency_reason = st.text_input("Reason (e.g., Gen 2 LED +15% increase lumen output)", value=st.session_state.get('efficiency_reason', 'Current Generation'))
 
-    efficiency_reason = st.text_input(
-        "Reason (e.g., Gen 2 LED +15% increase lumen output)",
-        value=st.session_state.get('efficiency_reason', 'Current Generation')
-    )
-
-    # Require reason if adjustment is made
     if led_efficiency_gain_percent != 0 and (efficiency_reason.strip() == "" or efficiency_reason == "Current Generation"):
         st.error("⚠️ You must provide a reason for the LED Chipset Adjustment before proceeding.")
         st.stop()
@@ -133,7 +97,6 @@ if uploaded_file:
     st.session_state['led_efficiency_gain_percent'] = led_efficiency_gain_percent
     st.session_state['efficiency_reason'] = efficiency_reason
 
-    # === BASE LUMENS/WATTS FROM IES ===
     base_lm_per_m = 400.0
     base_w_per_m = float(param_data.get("Input Watts", 11.6))
 
@@ -142,25 +105,30 @@ if uploaded_file:
     new_lm_per_m = round(base_lm_per_m, 1)
     new_lm_per_w = round(new_lm_per_m / new_w_per_m, 1) if new_w_per_m != 0 else 0.0
 
-    # === SELECTED LENGTHS TABLE ===
     if st.session_state['lengths_list']:
         st.markdown("### Selected Lengths for IES Generation")
 
         length_table_data = []
 
-        show_end_plate_pitch = (
-            st.session_state['end_plate_thickness'] != 5.5 or
-            st.session_state['led_pitch'] != 56.0
-        )
+        show_end_plate_pitch = st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0
+        show_chipset_reason = led_efficiency_gain_percent != 0 or efficiency_reason != "Current Generation"
 
-        show_chipset_reason = (
-            led_efficiency_gain_percent != 0 or
-            efficiency_reason != "Current Generation"
-        )
+        product_tiers = []
 
         for length in st.session_state['lengths_list']:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
+
+            # Determine Product Tier
+            tier = "Core"
+            if st.session_state['led_pitch'] % 4 != 0:
+                tier = "Advanced"
+            if tier == "Advanced" and led_efficiency_gain_percent != 0:
+                tier = "Professional"
+            if show_end_plate_pitch:
+                tier = "Bespoke"
+
+            product_tiers.append(tier)
 
             row = {
                 "Length (m)": f"{length:.3f}",
@@ -168,7 +136,8 @@ if uploaded_file:
                 "Watts/m": f"{new_w_per_m:.1f}",
                 "Total Lumens": f"{total_lumens:.1f}",
                 "Total Watts": f"{total_watts:.1f}",
-                "lm/W": f"{new_lm_per_w:.1f}"
+                "lm/W": f"{new_lm_per_w:.1f}",
+                "Product Tier": tier
             }
 
             if show_chipset_reason:
@@ -185,16 +154,15 @@ if uploaded_file:
 
         st.table(lengths_df.style.format(precision=1).set_properties(**{'text-align': 'right'}))
 
-        st.download_button(
-            "Download CSV Summary",
-            data=lengths_df.to_csv(index=False).encode('utf-8'),
-            file_name="Selected_Lengths_Summary.csv",
-            mime="text/csv"
-        )
+        # Show note if multiple product tiers detected
+        if len(set(product_tiers)) > 1:
+            st.warning("⚠️ Where multiple tiers are displayed, the highest tier applies.")
+
+        st.download_button("Download CSV Summary", data=lengths_df.to_csv(index=False).encode('utf-8'), file_name="Selected_Lengths_Summary.csv", mime="text/csv")
+
     else:
         st.info("No lengths selected yet. Click a button above to add lengths.")
 
-    # === COMPARISON TABLE ===
     st.markdown("## Comparison Table: Base vs Optimised")
 
     comparison_df = pd.DataFrame({
@@ -205,7 +173,6 @@ if uploaded_file:
 
     st.table(comparison_df.style.format(precision=1).set_properties(**{'text-align': 'right'}))
 
-    # === GENERATE OPTIMISED IES FILES & DOWNLOAD ===
     st.markdown("## Generate Optimised IES Files")
 
     if st.session_state['lengths_list']:
@@ -219,12 +186,7 @@ if uploaded_file:
 
         zip_buffer = create_zip(files_to_zip)
 
-        st.download_button(
-            label="Generate IES Files & Download ZIP",
-            data=zip_buffer,
-            file_name="Optimised_IES_Files.zip",
-            mime="application/zip"
-        )
+        st.download_button(label="Generate IES Files & Download ZIP", data=zip_buffer, file_name="Optimised_IES_Files.zip", mime="application/zip")
 
 else:
     st.info("Upload an IES file to begin optimisation.")
