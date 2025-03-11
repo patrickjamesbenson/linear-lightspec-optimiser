@@ -46,7 +46,7 @@ if uploaded_file:
 
     if not st.session_state['locked']:
         end_plate_thickness = st.number_input("End Plate Expansion Gutter (mm)", min_value=0.0, value=5.5, step=0.1)
-        led_pitch = st.number_input("LED Series Module Pitch (mm)", min_value=40.0, value=56.0, step=0.1)
+        led_pitch = st.number_input("LED Series Module Pitch (mm)", min_value=14.0, value=56.0, step=0.1)
         confirm_lock = st.checkbox("Confirm End Plate & LED Pitch (Do not edit unless you know what you're doing)")
         if confirm_lock:
             st.session_state['locked'] = True
