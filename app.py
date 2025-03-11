@@ -3,9 +3,11 @@ import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
+# === STREAMLIT PAGE CONFIG ===
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
 
+# === UPLOAD IES FILE ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
 if uploaded_file:
@@ -155,7 +157,7 @@ if uploaded_file:
         df = pd.DataFrame(table_rows)
 
         gb = GridOptionsBuilder.from_dataframe(df)
-        gb.configure_selection('single', use_checkbox=True)
+        gb.configure_selection('multiple', use_checkbox=True)
         gb.configure_grid_options(domLayout='normal')
 
         grid_response = AgGrid(
@@ -168,20 +170,11 @@ if uploaded_file:
 
         selected_rows = grid_response.get('selected_rows', [])
 
-        # Defensive check before deletion
-        if isinstance(selected_rows, list) and len(selected_rows) > 0:
-            selected_row = selected_rows[0]
-            length_value_str = selected_row.get('Length (m)', None)
-
-            if length_value_str:
-                length_value = float(length_value_str.strip())
-
-                if st.button("🗑️ Delete Selected Length"):
-                    st.session_state['lengths_list'] = [
-                        l for l in st.session_state['lengths_list']
-                        if round(l, 3) != round(length_value, 3)
-                    ]
-                    st.experimental_rerun()
+        if selected_rows:
+            if st.button("🗑️ Delete Selected Length(s)"):
+                lengths_to_delete = [float(r['Length (m)']) for r in selected_rows]
+                st.session_state['lengths_list'] = [l for l in st.session_state['lengths_list'] if round(l, 3) not in [round(ld, 3) for ld in lengths_to_delete]]
+                st.experimental_rerun()
 
         if len(product_tiers_found) > 1:
             st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
