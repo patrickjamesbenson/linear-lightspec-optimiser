@@ -10,8 +10,6 @@ st.title("Linear LightSpec Optimiser")
 # === INITIALISE SESSION STATE ===
 if 'locked' not in st.session_state:
     st.session_state['locked'] = True
-if 'chipset_locked' not in st.session_state:
-    st.session_state['chipset_locked'] = False
 if 'lengths_list' not in st.session_state:
     st.session_state['lengths_list'] = []
 if 'end_plate_thickness' not in st.session_state:
@@ -103,7 +101,7 @@ if uploaded_file:
         st.session_state['lengths_list'].append(longer_length_m)
 
     # === LED CHIPSET ADJUSTMENT ===
-    with st.expander("LED Chipset Adjustment", expanded=True) as chipset_expander:
+    with st.expander("LED Chipset Adjustment", expanded=True):
         led_chipset_adjustment = st.number_input(
             "LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0,
             value=st.session_state['led_efficiency_gain_percent'], step=1.0
@@ -114,18 +112,9 @@ if uploaded_file:
             value=st.session_state['efficiency_reason']
         )
 
-        # Require reason if adjustment is non-zero
-        if led_chipset_adjustment != 0 and reason.strip() == "":
-            st.warning("Please enter a reason for the LED Chipset Adjustment before proceeding.")
-            st.session_state['chipset_locked'] = False
-        else:
-            st.session_state['led_efficiency_gain_percent'] = led_chipset_adjustment
-            st.session_state['efficiency_reason'] = reason
-            st.session_state['efficiency_multiplier'] = 1 + (led_chipset_adjustment / 100)
-            st.session_state['chipset_locked'] = True
-
-    if not chipset_expander:
-        st.session_state['chipset_locked'] = True
+        st.session_state['led_efficiency_gain_percent'] = led_chipset_adjustment
+        st.session_state['efficiency_reason'] = reason
+        st.session_state['efficiency_multiplier'] = 1 + (led_chipset_adjustment / 100)
 
     # === LIGHTING DESIGN EFFICIENCY OPTIMISATION ===
     st.markdown("## Lighting Design Efficiency Optimisation")
@@ -138,8 +127,8 @@ if uploaded_file:
 
     st.metric("Recommended Lumens per Metre (factor)", f"{recommended_factor:.2f}x")
 
-    # === LENGTH TABLE - ONLY IF CHIPSET LOCKED ===
-    if st.session_state['chipset_locked'] and st.session_state['lengths_list']:
+    # === LENGTH TABLE ===
+    if st.session_state['lengths_list']:
         st.markdown("### Selected Lengths for IES Generation")
 
         base_lm_per_m = 400
@@ -148,8 +137,8 @@ if uploaded_file:
         length_table_data = []
 
         for length in st.session_state['lengths_list']:
-            lm_per_m = base_lm_per_m * recommended_factor * st.session_state['efficiency_multiplier']
-            w_per_m = base_w_per_m * recommended_factor
+            lm_per_m = base_lm_per_m * st.session_state['recommended_factor'] * st.session_state['efficiency_multiplier']
+            w_per_m = base_w_per_m * st.session_state['recommended_factor']
             total_lumens = lm_per_m * length
             total_watts = w_per_m * length
 
@@ -176,8 +165,6 @@ if uploaded_file:
             file_name="Selected_Lengths_Summary.csv",
             mime="text/csv"
         )
-    elif not st.session_state['chipset_locked']:
-        st.info("Complete the LED Chipset Adjustment section to proceed.")
 
     # === PRODUCT TIER FEEDBACK ===
     st.markdown("## Product Tier Feedback (Draft Mode)")
@@ -203,7 +190,7 @@ if uploaded_file:
     # === GENERATE OPTIMISED IES FILES ===
     st.markdown("## Generate Optimised IES Files")
 
-    if st.session_state['chipset_locked'] and st.session_state['lengths_list']:
+    if st.session_state['lengths_list']:
         if st.button("Generate IES Files & Download ZIP"):
             files_to_zip = {}
 
