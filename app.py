@@ -170,10 +170,15 @@ if uploaded_file:
 
         selected_rows = grid_response.get('selected_rows', [])
 
-        if selected_rows:
-            if st.button("🗑️ Delete Selected Length(s)"):
+        # Defensive check: selected_rows is a list of dicts
+        if selected_rows and isinstance(selected_rows, list) and len(selected_rows) > 0:
+            delete_button_label = f"🗑️ Delete Selected Length(s) ({len(selected_rows)} Selected)"
+            if st.button(delete_button_label):
                 lengths_to_delete = [float(r['Length (m)']) for r in selected_rows]
-                st.session_state['lengths_list'] = [l for l in st.session_state['lengths_list'] if round(l, 3) not in [round(ld, 3) for ld in lengths_to_delete]]
+                st.session_state['lengths_list'] = [
+                    l for l in st.session_state['lengths_list']
+                    if round(l, 3) not in [round(ld, 3) for ld in lengths_to_delete]
+                ]
                 st.experimental_rerun()
 
         if len(product_tiers_found) > 1:
@@ -185,6 +190,7 @@ if uploaded_file:
             file_name="Selected_Lengths_Summary.csv",
             mime="text/csv"
         )
+
     else:
         st.info("No lengths selected yet. Click a button above to add lengths.")
 
