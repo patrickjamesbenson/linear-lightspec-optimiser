@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
@@ -109,19 +110,19 @@ if uploaded_file:
     new_lm_per_m = round(base_lm_per_m, 1)
     new_lm_per_w = round(new_lm_per_m / new_w_per_m, 1) if new_w_per_m != 0 else 0.0
 
-    # === SINGLE TABLE WITH BIN ICON COLUMN ===
+    # === AG GRID TABLE FOR LENGTHS ===
     if st.session_state['lengths_list']:
         st.markdown("### Selected Lengths for IES Generation")
 
-        table_rows = []
         product_tiers_found = set()
+        table_rows = []
 
-        for idx, length in enumerate(st.session_state['lengths_list']):
+        for length in st.session_state['lengths_list']:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
-            # Determine product tier
-            if (st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0):
+            # Product Tier Logic
+            if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
                 tier = "Professional"
@@ -133,7 +134,6 @@ if uploaded_file:
             product_tiers_found.add(tier)
 
             row = {
-                "🗑️": f"delete_{idx}",  # Button key for deletion
                 "Length (m)": f"{length:.3f}",
                 "Lumens/m": f"{new_lm_per_m:.1f}",
                 "Watts/m": f"{new_w_per_m:.1f}",
@@ -143,41 +143,47 @@ if uploaded_file:
                 "Product Tier": tier
             }
 
-            # Optional columns
             if led_efficiency_gain_percent != 0:
                 row["Chipset Adj. (%)"] = f"{led_efficiency_gain_percent:.1f}"
                 row["Reason"] = efficiency_reason
 
-            if (st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0):
+            if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 row["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
                 row["LED Series Pitch (mm)"] = f"{st.session_state['led_pitch']:.1f}"
 
-            table_rows.append((idx, row))
+            table_rows.append(row)
 
-        # Render table with bins in first column
-        cols = st.columns([0.05, 0.95])
-        with cols[1]:
-            df_rows = [row for idx, row in table_rows]
-            df = pd.DataFrame(df_rows).drop(columns=["🗑️"])
-            st.dataframe(df.style.format(precision=1), height=(len(df_rows) * 35 + 50))
+        df = pd.DataFrame(table_rows)
 
-        with cols[0]:
-            for idx, row in table_rows:
-                if st.button("🗑️", key=row["🗑️"]):
-                    st.session_state['lengths_list'].pop(idx)
-                    st.experimental_rerun()
+        gb = GridOptionsBuilder.from_dataframe(df)
+        gb.configure_selection('single', use_checkbox=True)
+        gb.configure_grid_options(domLayout='normal')
+
+        grid_response = AgGrid(
+            df,
+            gridOptions=gb.build(),
+            update_mode=GridUpdateMode.SELECTION_CHANGED,
+            height=(len(df) * 35 + 50),
+            allow_unsafe_jscode=True
+        )
+
+        selected = grid_response['selected_rows']
+        if selected:
+            length_value = float(selected[0]['Length (m)'])
+            if st.button("🗑️ Delete Selected Length"):
+                st.session_state['lengths_list'] = [l for l in st.session_state['lengths_list'] if round(l, 3) != round(length_value, 3)]
+                st.experimental_rerun()
 
         if len(product_tiers_found) > 1:
             st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
 
-        # Download CSV
-        lengths_df_csv = df.copy()
         st.download_button(
             "Download CSV Summary",
-            data=lengths_df_csv.to_csv(index=False).encode('utf-8'),
+            data=df.to_csv(index=False).encode('utf-8'),
             file_name="Selected_Lengths_Summary.csv",
             mime="text/csv"
         )
+
     else:
         st.info("No lengths selected yet. Click a button above to add lengths.")
 
