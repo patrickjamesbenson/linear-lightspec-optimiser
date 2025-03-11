@@ -46,11 +46,13 @@ if uploaded_file:
     shorter_length_m = round(min_length_mm / 1000, 3)
     longer_length_m = round(max_length_mm / 1000, 3)
 
-    if st.button(f"Add Shorter Buildable Length: {shorter_length_m:.3f} m"):
-        st.session_state['lengths_list'].append(shorter_length_m)
-
-    if st.button(f"Add Longer Buildable Length: {longer_length_m:.3f} m"):
-        st.session_state['lengths_list'].append(longer_length_m)
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button(f"Add Shorter Buildable Length: {shorter_length_m:.3f} m"):
+            st.session_state['lengths_list'].append(shorter_length_m)
+    with col2:
+        if st.button(f"Add Longer Buildable Length: {longer_length_m:.3f} m"):
+            st.session_state['lengths_list'].append(longer_length_m)
 
     # === LED CHIPSET ADJUSTMENT ===
     with st.expander("💡 LED Chipset Adjustment", expanded=False):
@@ -83,7 +85,7 @@ if uploaded_file:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
-            # Product Tier Assignment Logic
+            # Product Tier Logic
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
@@ -115,34 +117,32 @@ if uploaded_file:
 
             length_table_data.append((row, idx))
 
-        # Display the table header
         if length_table_data:
             col_config = list(length_table_data[0][0].keys())
 
             # Create columns layout
-            cols = st.columns([1] + [1 for _ in col_config])
+            header_cols = st.columns([0.5] + [1 for _ in col_config])
 
-            cols[0].markdown("🗑️")
+            header_cols[0].markdown("🗑️")
             for i, col in enumerate(col_config):
-                cols[i + 1].markdown(f"**{col}**")
+                header_cols[i + 1].markdown(f"**{col}**")
 
             # Display each row with its delete button
             for row, idx in length_table_data:
-                cols = st.columns([1] + [1 for _ in col_config])
+                row_cols = st.columns([0.5] + [1 for _ in col_config])
 
-                # Delete button in first column
-                if cols[0].button("🗑️", key=f"delete_{idx}"):
+                if row_cols[0].button("🗑️", key=f"delete_{idx}"):
                     st.session_state['lengths_list'].pop(idx)
                     st.experimental_rerun()
 
                 for i, col in enumerate(col_config):
-                    cols[i + 1].write(row[col])
+                    row_cols[i + 1].write(row[col])
 
         # Display note for mixed tiers
         if len(product_tiers_found) > 1:
             st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
 
-        # Download CSV
+        # Download CSV button
         data_only = [r for r, _ in length_table_data]
         df = pd.DataFrame(data_only)
 
