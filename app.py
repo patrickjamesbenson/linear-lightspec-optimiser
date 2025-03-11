@@ -123,12 +123,13 @@ if uploaded_file:
 
     efficiency_reason = st.text_input(
         "Reason (e.g., Gen 2 LED +15% increase lumen output)",
-        value=st.session_state.get('efficiency_reason', 'Current Generation')
+        value=st.session_state.get('efficiency_reason', '')
     )
 
-    # Require reason if adjustment is non-zero
+    # FORCE reason if adjustment is not zero
     if led_efficiency_gain_percent != 0 and efficiency_reason.strip() == "":
-        st.warning("⚠️ Please enter a reason for the LED Chipset Adjustment.")
+        st.error("⚠️ You must provide a reason for the LED Chipset Adjustment before proceeding.")
+        st.stop()  # prevent app from continuing until reason is supplied
     else:
         st.session_state['led_efficiency_gain_percent'] = led_efficiency_gain_percent
         st.session_state['efficiency_reason'] = efficiency_reason
@@ -151,7 +152,6 @@ if uploaded_file:
     if st.session_state['lengths_list']:
         st.markdown("### Selected Lengths for IES Generation")
 
-        # Base placeholder values
         base_lm_per_m = 400
         base_w_per_m = 20
 
