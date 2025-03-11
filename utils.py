@@ -1,56 +1,42 @@
+import pandas as pd
+import numpy as np
 import io
 import zipfile
 
-def parse_ies_file(uploaded_file):
-    # Dummy data for now (replace with real parser)
+def parse_ies_file(file_content):
+    # Simplified parser, replace with your existing or advanced parser later
+    lines = file_content.splitlines()
+    header_lines = []
+    data_start = 0
+    for i, line in enumerate(lines):
+        header_lines.append(line)
+        if line.strip().isdigit():
+            data_start = i
+            break
     return {
-        "luminaire_name": "BLine 8585D 11.6W - 80CRI - 3000K",
-        "length_m": 1.0,
-        "lumens_per_m": 1500.0,
-        "watts_per_m": 11.6,
-        "efficacy": 129.31
+        "header": header_lines,
+        "data": lines[data_start:]
     }
 
-def validate_lengths(desired_length_m, end_plate_mm=5.5, led_pitch_mm=56.0):
-    min_length_mm = 571
-    end_total_mm = end_plate_mm * 2
-    usable_length_mm = (desired_length_m * 1000) - end_total_mm
-    board_count = round(usable_length_mm / led_pitch_mm)
+def modify_candela_data(data_lines, efficiency_gain=1.0):
+    # Simplified candela scaling, apply efficiency multiplier
+    modified_data = []
+    for line in data_lines:
+        try:
+            numbers = [float(n) * efficiency_gain for n in line.split()]
+            modified_line = ' '.join([str(round(num, 3)) for num in numbers])
+            modified_data.append(modified_line)
+        except:
+            modified_data.append(line)
+    return modified_data
 
-    shorter_mm = (board_count - 1) * led_pitch_mm + end_total_mm
-    longer_mm = (board_count + 1) * led_pitch_mm + end_total_mm
+def create_ies_file(header, data):
+    return "\n".join(header + data)
 
-    return shorter_mm / 1000, longer_mm / 1000
-
-def calculate_recommendations(ies_data, achieved_lux, target_lux, efficiency_gain, length_choice_m):
-    lux_ratio = target_lux / achieved_lux
-    adjusted_lm_m = ies_data["lumens_per_m"] * lux_ratio
-    adjusted_lm_m *= (1 + efficiency_gain / 100)
-
-    new_efficacy = ies_data["efficacy"] * (1 + efficiency_gain / 100)
-    new_watts_m = adjusted_lm_m / new_efficacy
-
-    return {
-        "lumens_per_m": adjusted_lm_m,
-        "watts_per_m": new_watts_m,
-        "efficacy": new_efficacy,
-        "length_m": length_choice_m
-    }
-
-def generate_ies_files_zip(results, end_plate_mm, led_pitch_mm):
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zf:
-        for rec in results:
-            length = rec['length_m']
-            filename = f"BLine_{length:.3f}m_Optimised.ies"
-            content = f"""IESNA:LM-63-2002
-[MANUFAC] Evolt
-[LUMINAIRE] BLine Optimised
-TILT=NONE
-1 1500 -1 91 4 1 2 0.08 {length:.3f} 0.09 1 1 {rec['watts_per_m'] * length:.2f}
-90 0 30 60
-0 100 200 300 400
-"""
+def create_zip(files_dict):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w') as zf:
+        for filename, content in files_dict.items():
             zf.writestr(filename, content)
-    zip_buffer.seek(0)
-    return zip_buffer
+    buffer.seek(0)
+    return buffer
