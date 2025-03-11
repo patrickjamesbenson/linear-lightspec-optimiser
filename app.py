@@ -113,17 +113,51 @@ if uploaded_file:
     if st.button(f"Add Longer Buildable Length: {longer_length_m} m", key=f"long_{longer_length_m}"):
         st.session_state['lengths_list'].append(longer_length_m)
 
+    # === LED CHIPSET ADJUSTMENT ===
+    st.markdown("## LED Chipset Adjustment")
+
+    led_efficiency_gain_percent = st.number_input(
+        "LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0,
+        value=st.session_state.get('led_efficiency_gain_percent', 0.0), step=1.0
+    )
+
+    efficiency_reason = st.text_input(
+        "Reason (e.g., Gen 2 LED +15% increase lumen output)",
+        value=st.session_state.get('efficiency_reason', 'Current Generation')
+    )
+
+    # Require reason if adjustment is non-zero
+    if led_efficiency_gain_percent != 0 and efficiency_reason.strip() == "":
+        st.warning("⚠️ Please enter a reason for the LED Chipset Adjustment.")
+    else:
+        st.session_state['led_efficiency_gain_percent'] = led_efficiency_gain_percent
+        st.session_state['efficiency_reason'] = efficiency_reason
+
+    efficiency_multiplier = 1 + (led_efficiency_gain_percent / 100)
+    st.session_state['efficiency_multiplier'] = efficiency_multiplier
+
+    # === LIGHTING DESIGN EFFICIENCY OPTIMISATION ===
+    st.markdown("## Lighting Design Efficiency Optimisation")
+
+    achieved_lux = st.number_input("Achieved Lux in Design", min_value=0.0, value=300.0, step=10.0)
+    target_lux = st.number_input("Target Lux in Design", min_value=0.0, value=250.0, step=10.0)
+
+    recommended_factor = (target_lux / achieved_lux) if achieved_lux else 1
+    st.metric("Recommended Lumens per Metre (factor)", f"{recommended_factor:.2f}x")
+
+    st.session_state['recommended_factor'] = recommended_factor
+
+    # === SELECTED LENGTHS TABLE ===
     if st.session_state['lengths_list']:
         st.markdown("### Selected Lengths for IES Generation")
 
-        # Base placeholders
-        base_lm_per_m = 400  # Placeholder
-        base_w_per_m = 20    # Placeholder
+        # Base placeholder values
+        base_lm_per_m = 400
+        base_w_per_m = 20
 
         length_table_data = []
 
-        # Multiplier and reason set for Chipset Adjustment
-        efficiency_multiplier = 1 + (st.session_state.get('led_efficiency_gain_percent', 0) / 100)
+        efficiency_multiplier = st.session_state.get('efficiency_multiplier', 1)
         efficiency_reason = st.session_state.get('efficiency_reason', 'Current Generation')
         recommended_factor = st.session_state.get('recommended_factor', 1)
 
@@ -156,35 +190,8 @@ if uploaded_file:
             file_name="Selected_Lengths_Summary.csv",
             mime="text/csv"
         )
-
     else:
         st.info("No lengths selected yet. Click a button above to add lengths.")
-
-    # === LED CHIPSET ADJUSTMENT ===
-    st.markdown("## LED Chipset Adjustment")
-
-    led_efficiency_gain_percent = st.number_input(
-        "LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0, value=0.0, step=1.0
-    )
-    efficiency_reason = st.text_input(
-        "Reason (e.g., Gen 2 LED +15% increase lumen output)", value="Current Generation"
-    )
-
-    st.session_state['led_efficiency_gain_percent'] = led_efficiency_gain_percent
-    st.session_state['efficiency_reason'] = efficiency_reason
-
-    efficiency_multiplier = 1 + (led_efficiency_gain_percent / 100)
-
-    # === LIGHTING DESIGN EFFICIENCY OPTIMISATION ===
-    st.markdown("## Lighting Design Efficiency Optimisation")
-
-    achieved_lux = st.number_input("Achieved Lux in Design", min_value=0.0, value=300.0, step=10.0)
-    target_lux = st.number_input("Target Lux in Design", min_value=0.0, value=250.0, step=10.0)
-
-    recommended_factor = (target_lux / achieved_lux) if achieved_lux else 1
-    st.metric("Recommended Lumens per Metre (factor)", f"{recommended_factor:.2f}x")
-
-    st.session_state['recommended_factor'] = recommended_factor
 
     # === PRODUCT TIER FEEDBACK ===
     st.markdown("## Product Tier Feedback (Draft Mode)")
