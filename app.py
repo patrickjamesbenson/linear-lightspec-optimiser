@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
@@ -10,6 +11,45 @@ uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
+
+    # === BASE FILE SUMMARY ===
+    with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
+        ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found")
+        test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
+        manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found")
+        lumcat_info = next((line for line in parsed['header'] if line.startswith("[LUMCAT]")), "[LUMCAT] Not Found")
+        luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
+        issuedate_info = next((line for line in parsed['header'] if line.startswith("[ISSUEDATE]")), "[ISSUEDATE] Not Found")
+
+        metadata_dict = {
+            "IES Version": ies_version,
+            "Test Info": test_info,
+            "Manufacturer": manufac_info,
+            "Luminaire Catalog Number": lumcat_info,
+            "Luminaire Description": luminaire_info,
+            "Issued Date": issuedate_info
+        }
+
+        st.markdown("### IES Metadata")
+        st.table(pd.DataFrame.from_dict(metadata_dict, orient='index', columns=['Value']))
+
+        photometric_line = parsed['data'][0] if parsed['data'] else ""
+        photometric_params = photometric_line.strip().split()
+
+        if len(photometric_params) >= 13:
+            param_labels = [
+                "Number of Lamps", "Lumens per Lamp", "Candela Multiplier",
+                "Vertical Angles", "Horizontal Angles", "Photometric Type",
+                "Units Type", "Width (m)", "Length (m)", "Height (m)",
+                "Ballast Factor", "Future Use", "Input Watts"
+            ]
+
+            param_data = {label: value for label, value in zip(param_labels, photometric_params[:13])}
+
+            st.markdown("### Photometric Parameters")
+            st.table(pd.DataFrame.from_dict(param_data, orient='index', columns=['Value']))
+        else:
+            st.warning("Photometric Parameters not found or incomplete.")
 
     # === BASE BUILD METHODOLOGY ===
     with st.expander("📂 Base Build Methodology", expanded=False):
@@ -75,14 +115,12 @@ if uploaded_file:
 
     if st.session_state['lengths_list']:
         product_tiers_found = set()
-        length_table_data = []
+        table_rows = []
 
-        # Loop over lengths to build table rows
-        for idx, length in enumerate(st.session_state['lengths_list']):
+        for length in st.session_state['lengths_list']:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
-            # Product Tier Assignment Logic
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
@@ -94,7 +132,6 @@ if uploaded_file:
 
             product_tiers_found.add(tier)
 
-            # === Assemble the row ===
             row = {
                 "Length (m)": f"{length:.3f}",
                 "Lumens/m": f"{new_lm_per_m:.1f}",
@@ -105,42 +142,56 @@ if uploaded_file:
                 "Product Tier": tier
             }
 
-            # Include LED adjustments if changed
             if led_efficiency_gain_percent != 0:
                 row["Chipset Adj. (%)"] = f"{led_efficiency_gain_percent:.1f}"
                 row["Reason"] = efficiency_reason
 
-            # Include end plate & pitch if altered
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 row["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
                 row["LED Series Pitch (mm)"] = f"{st.session_state['led_pitch']:.1f}"
 
-            # Add the delete button directly to the row
-            delete_button = st.button("🗑️", key=f"delete_{idx}")
-            if delete_button:
-                st.session_state['lengths_list'].pop(idx)
-                st.experimental_rerun()
+            table_rows.append(row)
 
-            # Display row
-            st.write(f"🗑️ {row}")
+        df = pd.DataFrame(table_rows)
 
-        # Display note for mixed tiers
+        gb = GridOptionsBuilder.from_dataframe(df)
+        gb.configure_selection('single', use_checkbox=True)
+        gb.configure_grid_options(domLayout='normal')
+
+        grid_response = AgGrid(
+            df,
+            gridOptions=gb.build(),
+            update_mode=GridUpdateMode.SELECTION_CHANGED,
+            height=(len(df) * 35 + 50),
+            allow_unsafe_jscode=True
+        )
+
+        selected_rows = grid_response.get('selected_rows', [])
+
+        # Defensive check before deletion
+        if isinstance(selected_rows, list) and len(selected_rows) > 0:
+            selected_row = selected_rows[0]
+            length_value_str = selected_row.get('Length (m)', None)
+
+            if length_value_str:
+                length_value = float(length_value_str.strip())
+
+                if st.button("🗑️ Delete Selected Length"):
+                    st.session_state['lengths_list'] = [
+                        l for l in st.session_state['lengths_list']
+                        if round(l, 3) != round(length_value, 3)
+                    ]
+                    st.experimental_rerun()
+
         if len(product_tiers_found) > 1:
             st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
 
-        # Download CSV of lengths
-        df = pd.DataFrame([{
-            k: v for k, v in row.items() if not k.startswith("🗑️")
-        } for row in length_table_data])
-
-        if not df.empty:
-            st.download_button(
-                "Download CSV Summary",
-                data=df.to_csv(index=False).encode('utf-8'),
-                file_name="Selected_Lengths_Summary.csv",
-                mime="text/csv"
-            )
-
+        st.download_button(
+            "Download CSV Summary",
+            data=df.to_csv(index=False).encode('utf-8'),
+            file_name="Selected_Lengths_Summary.csv",
+            mime="text/csv"
+        )
     else:
         st.info("No lengths selected yet. Click a button above to add lengths.")
 
@@ -149,7 +200,6 @@ if uploaded_file:
 
     if st.session_state['lengths_list']:
         files_to_zip = {}
-
         for length in st.session_state['lengths_list']:
             scaled_data = modify_candela_data(parsed['data'], 1.0)
             new_file = create_ies_file(parsed['header'], scaled_data)
