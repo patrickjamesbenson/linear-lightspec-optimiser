@@ -2,10 +2,12 @@ import streamlit as st
 import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
 
+# === STREAMLIT PAGE CONFIG ===
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 
 st.title("Linear LightSpec Optimiser")
 
+# === UPLOAD IES FILE ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
 if uploaded_file:
@@ -95,24 +97,20 @@ if uploaded_file:
         st.markdown("### Selected Lengths for IES Generation")
 
         length_table_data = []
-        product_tiers_found = set()
 
         for length in st.session_state['lengths_list']:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
             # Product Tier Logic
-            if (st.session_state['end_plate_thickness'] != 5.5 or
-                st.session_state['led_pitch'] != 56.0):
-                tier = "Bespoke"
-            elif led_efficiency_gain_percent != 0:
-                tier = "Professional"
-            elif st.session_state['led_pitch'] % 4 != 0:
-                tier = "Advanced"
-            else:
+            if st.session_state['led_pitch'] % 4 == 0:
                 tier = "Core"
-
-            product_tiers_found.add(tier)
+            else:
+                tier = "Advanced"
+                if led_efficiency_gain_percent != 0:
+                    tier = "Professional"
+            if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
+                tier = "Bespoke"
 
             row = {
                 "Length (m)": f"{length:.3f}",
@@ -124,17 +122,6 @@ if uploaded_file:
                 "Product Tier": tier
             }
 
-            # Show chipset adjustment only if it's not zero
-            if led_efficiency_gain_percent != 0:
-                row["Chipset Adj. (%)"] = f"{led_efficiency_gain_percent:.1f}"
-                row["Reason"] = efficiency_reason
-
-            # Show Base Build adjustments if altered
-            if (st.session_state['end_plate_thickness'] != 5.5 or
-                st.session_state['led_pitch'] != 56.0):
-                row["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
-                row["LED Series Pitch (mm)"] = f"{st.session_state['led_pitch']:.1f}"
-
             length_table_data.append(row)
 
         lengths_df = pd.DataFrame(length_table_data)
@@ -142,7 +129,8 @@ if uploaded_file:
         st.table(lengths_df.style.format(precision=1).set_properties(**{'text-align': 'right'}))
 
         # Add note if multiple tiers exist
-        if len(product_tiers_found) > 1:
+        unique_tiers = lengths_df["Product Tier"].unique()
+        if len(unique_tiers) > 1:
             st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
 
         st.download_button(
