@@ -14,7 +14,6 @@ if uploaded_file:
 
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
-        # Metadata + Photometric Parameters
         ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found")
         test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
         manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found")
@@ -167,12 +166,22 @@ if uploaded_file:
             allow_unsafe_jscode=True
         )
 
-        selected = grid_response.get('selected_rows', [])
-        if selected is not None and len(selected) > 0:
-            length_value = float(selected[0]['Length (m)'])
-            if st.button("🗑️ Delete Selected Length"):
-                st.session_state['lengths_list'] = [l for l in st.session_state['lengths_list'] if round(l, 3) != round(length_value, 3)]
-                st.experimental_rerun()
+        selected_rows = grid_response.get('selected_rows', [])
+
+        # Defensive check before deletion
+        if isinstance(selected_rows, list) and len(selected_rows) > 0:
+            selected_row = selected_rows[0]
+            length_value_str = selected_row.get('Length (m)', None)
+
+            if length_value_str:
+                length_value = float(length_value_str.strip())
+
+                if st.button("🗑️ Delete Selected Length"):
+                    st.session_state['lengths_list'] = [
+                        l for l in st.session_state['lengths_list']
+                        if round(l, 3) != round(length_value, 3)
+                    ]
+                    st.experimental_rerun()
 
         if len(product_tiers_found) > 1:
             st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
