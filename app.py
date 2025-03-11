@@ -13,8 +13,43 @@ if uploaded_file:
     parsed = parse_ies_file(file_content)
 
     st.subheader("Base File Summary")
-    st.text(f"Header Lines: {len(parsed['header'])}")
-    st.text(f"Data Lines: {len(parsed['data'])}")
+
+    # === Extract and display metadata ===
+    ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Unknown")
+    test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "Not Provided")
+    manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "Not Provided")
+    lumcat_info = next((line for line in parsed['header'] if line.startswith("[LUMCAT]")), "Not Provided")
+    luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "Not Provided")
+
+    st.markdown(f"""
+    - **IES Version**: {ies_version}
+    - **Test Info**: {test_info}
+    - **Manufacturer**: {manufac_info}
+    - **Luminaire Catalog Number**: {lumcat_info}
+    - **Luminaire Description**: {luminaire_info}
+    """)
+
+    # === Extract and display 13 Photometric Parameters ===
+    photometric_params = []
+    for line in parsed['data']:
+        numbers = line.strip().split()
+        if len(numbers) >= 13:
+            photometric_params = numbers[:13]
+            break
+
+    if photometric_params:
+        st.markdown("### Photometric Parameters")
+        param_labels = [
+            "Number of Lamps", "Lumens per Lamp", "Candela Multiplier",
+            "Vertical Angles", "Horizontal Angles", "Photometric Type",
+            "Units Type", "Width (m)", "Length (m)", "Height (m)",
+            "Ballast Factor", "Future Use", "Input Watts"
+        ]
+        param_data = {label: value for label, value in zip(param_labels, photometric_params)}
+
+        st.table(pd.DataFrame.from_dict(param_data, orient='index', columns=['Value']))
+    else:
+        st.warning("Photometric Parameters not found in file.")
 
     # === End Plate & LED Pitch with Lock ===
     st.markdown("## End Plate & LED Pitch Configuration")
@@ -97,8 +132,8 @@ if uploaded_file:
     # === Comparison Table ===
     st.markdown("## Comparison Table: Base vs Optimised")
 
-    base_lm_per_m = 400  # Placeholder, parse later
-    base_w_per_m = 20    # Placeholder, parse later
+    base_lm_per_m = 400  # Placeholder for now
+    base_w_per_m = 20    # Placeholder for now
 
     new_lm_per_m = base_lm_per_m * recommended_factor * efficiency_multiplier
     new_w_per_m = base_w_per_m * recommended_factor
