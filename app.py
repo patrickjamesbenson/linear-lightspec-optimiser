@@ -97,7 +97,7 @@ if uploaded_file:
     # === SELECT LENGTHS ===
     st.markdown("## Select Lengths")
 
-    desired_length_m = st.number_input("Desired Length (m)", min_value=0.5, value=1.0, step=0.1)
+    desired_length_m = st.number_input("Desired Length (m)", min_value=0.5, value=1.000, step=0.001, format="%.3f")
     desired_length_mm = desired_length_m * 1000
 
     min_length_mm = (int((desired_length_mm - st.session_state['end_plate_thickness'] * 2) / st.session_state['led_pitch'])) * st.session_state['led_pitch'] + st.session_state['end_plate_thickness'] * 2
@@ -107,10 +107,10 @@ if uploaded_file:
     longer_length_m = round(max_length_mm / 1000, 3)
 
     # === STACKED BUTTONS ===
-    if st.button(f"Add Shorter Buildable Length: {shorter_length_m} m", key=f"short_{shorter_length_m}"):
+    if st.button(f"Add Shorter Buildable Length: {shorter_length_m:.3f} m", key=f"short_{shorter_length_m}"):
         st.session_state['lengths_list'].append(shorter_length_m)
 
-    if st.button(f"Add Longer Buildable Length: {longer_length_m} m", key=f"long_{longer_length_m}"):
+    if st.button(f"Add Longer Buildable Length: {longer_length_m:.3f} m", key=f"long_{longer_length_m}"):
         st.session_state['lengths_list'].append(longer_length_m)
 
     # === LED CHIPSET ADJUSTMENT ===
@@ -134,13 +134,13 @@ if uploaded_file:
     st.session_state['efficiency_reason'] = efficiency_reason
 
     # === BASE LUMENS/WATTS FROM IES ===
-    base_lm_per_m = 400.0  # Example default, replace with parsed data!
-    base_w_per_m = float(param_data.get("Input Watts", 11.6))  # Extracted from IES file!
+    base_lm_per_m = 400.0
+    base_w_per_m = float(param_data.get("Input Watts", 11.6))
 
     # === EFFICIENCY GAIN REDUCES WATTS ===
     efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
     new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
-    new_lm_per_m = round(base_lm_per_m, 1)  # stays fixed
+    new_lm_per_m = round(base_lm_per_m, 1)
     new_lm_per_w = round(new_lm_per_m / new_w_per_m, 1) if new_w_per_m != 0 else 0.0
 
     # === SELECTED LENGTHS TABLE ===
@@ -149,22 +149,32 @@ if uploaded_file:
 
         length_table_data = []
 
+        # Decide if End Plate & Pitch need to be shown
+        show_end_plate_pitch = (
+            st.session_state['end_plate_thickness'] != 5.5 or
+            st.session_state['led_pitch'] != 56.0
+        )
+
         for length in st.session_state['lengths_list']:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
-            length_table_data.append({
-                "Length (m)": f"{length:.1f}",
-                "Lumens per Metre": f"{new_lm_per_m:.1f}",
-                "Watts per Metre": f"{new_w_per_m:.1f}",
-                "Total Lumens (lm)": f"{total_lumens:.1f}",
-                "Total Watts (W)": f"{total_watts:.1f}",
+            row = {
+                "Length (m)": f"{length:.3f}",
+                "Lumens/m": f"{new_lm_per_m:.1f}",
+                "Watts/m": f"{new_w_per_m:.1f}",
+                "Total Lumens": f"{total_lumens:.1f}",
+                "Total Watts": f"{total_watts:.1f}",
                 "lm/W": f"{new_lm_per_w:.1f}",
-                "End Plate (mm)": f"{st.session_state['end_plate_thickness']:.1f}",
-                "LED Series Pitch (mm)": f"{st.session_state['led_pitch']:.1f}",
-                "LED Chipset Adj. (%)": f"{led_efficiency_gain_percent:.1f}",
+                "Chipset Adj. (%)": f"{led_efficiency_gain_percent:.1f}",
                 "Reason": efficiency_reason
-            })
+            }
+
+            if show_end_plate_pitch:
+                row["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
+                row["LED Series Pitch (mm)"] = f"{st.session_state['led_pitch']:.1f}"
+
+            length_table_data.append(row)
 
         lengths_df = pd.DataFrame(length_table_data)
 
@@ -183,14 +193,14 @@ if uploaded_file:
     st.markdown("## Comparison Table: Base vs Optimised")
 
     comparison_df = pd.DataFrame({
-        "Metric": ["Lumens per Metre", "Watts per Metre", "lm/W"],
+        "Metric": ["Lumens/m", "Watts/m", "lm/W"],
         "Base": [f"{base_lm_per_m:.1f}", f"{base_w_per_m:.1f}", f"{base_lm_per_m / base_w_per_m:.1f}"],
         "Optimised": [f"{new_lm_per_m:.1f}", f"{new_w_per_m:.1f}", f"{new_lm_per_w:.1f}"]
     })
 
     st.table(comparison_df.style.format(precision=1).set_properties(**{'text-align': 'right'}))
 
-    # === GENERATE OPTIMISED IES FILES ===
+    # === GENERATE OPTIMISED IES FILES & DOWNLOAD ===
     st.markdown("## Generate Optimised IES Files")
 
     if st.session_state['lengths_list']:
@@ -198,9 +208,9 @@ if uploaded_file:
             files_to_zip = {}
 
             for length in st.session_state['lengths_list']:
-                scaled_data = modify_candela_data(parsed['data'], 1.0)  # No candela change right now
+                scaled_data = modify_candela_data(parsed['data'], 1.0)
                 new_file = create_ies_file(parsed['header'], scaled_data)
-                filename = f"Optimised_{length:.1f}m.ies"
+                filename = f"Optimised_{length:.3f}m.ies"
                 files_to_zip[filename] = new_file
 
             zip_buffer = create_zip(files_to_zip)
