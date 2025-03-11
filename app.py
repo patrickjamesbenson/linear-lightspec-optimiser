@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import re
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
@@ -12,13 +13,20 @@ if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
 
+    # === Extract CRI and CCT from [LUMINAIRE] ===
+    luminaire_line = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "")
+    cri_match = re.search(r"(\d+)\s*CRI", luminaire_line)
+    cct_match = re.search(r"(\d+)[Kk]", luminaire_line)
+
+    extracted_cri = cri_match.group(1) if cri_match else "N/A"
+    extracted_cct = cct_match.group(1) + "K" if cct_match else "N/A"
+
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
         ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found")
         test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
         manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found")
         lumcat_info = next((line for line in parsed['header'] if line.startswith("[LUMCAT]")), "[LUMCAT] Not Found")
-        luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
         issuedate_info = next((line for line in parsed['header'] if line.startswith("[ISSUEDATE]")), "[ISSUEDATE] Not Found")
 
         metadata_dict = {
@@ -26,7 +34,7 @@ if uploaded_file:
             "Test Info": test_info,
             "Manufacturer": manufac_info,
             "Luminaire Catalog Number": lumcat_info,
-            "Luminaire Description": luminaire_info,
+            "Luminaire Description": luminaire_line,
             "Issued Date": issuedate_info
         }
 
@@ -59,18 +67,19 @@ if uploaded_file:
             st.session_state['end_plate_thickness'] = 5.5
             st.session_state['led_pitch'] = 56.0
 
-        # Check if user tries to unlock when lengths exist
-        if st.session_state['locked']:
-            if st.button("🔓 Unlock Base Build Methodology"):
-                if st.session_state['lengths_list']:
-                    st.warning("⚠️ You cannot edit the Base Build Methodology once lengths are added. Remove all lengths to make changes.")
-                else:
-                    st.session_state['locked'] = False
-        else:
+        # Disable if lengths already exist
+        if st.session_state['lengths_list'] and st.session_state['locked']:
+            st.info("🔒 Base Build Methodology is locked because lengths are already added. Remove lengths to unlock.")
+        elif not st.session_state['locked']:
             if st.button("🔒 Lock Base Build Methodology"):
                 st.session_state['locked'] = True
+        elif st.session_state['locked']:
+            if st.button("🔓 Unlock Base Build Methodology"):
+                if not st.session_state['lengths_list']:
+                    st.session_state['locked'] = False
+                else:
+                    st.warning("⚠️ You must remove all lengths before unlocking Base Build Methodology.")
 
-        # Show input fields or info message
         if st.session_state['locked']:
             st.info(f"🔒 Locked: End Plate Expansion Gutter = {st.session_state['end_plate_thickness']} mm | LED Series Module Pitch = {st.session_state['led_pitch']} mm")
         else:
@@ -119,18 +128,12 @@ if uploaded_file:
     st.markdown("## 📏 Selected Lengths for IES Generation")
 
     if st.session_state['lengths_list']:
-        product_tiers_found = set()
         table_rows = []
-
-        # Extract CRI & CCT from Luminaire info
-        extracted_cri = ''.join(filter(str.isdigit, luminaire_info.split("CRI")[-1].split("-")[0])) if "CRI" in luminaire_info else "N/A"
-        extracted_cct = ''.join(filter(str.isdigit, luminaire_info.split("CRI")[-1].split("-")[-1])) + "K" if "CRI" in luminaire_info else "N/A"
 
         for length in st.session_state['lengths_list']:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
-            # Product Tier Logic in Luminaire & IES File Name
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
@@ -140,20 +143,19 @@ if uploaded_file:
             else:
                 tier = "Core"
 
-            product_tiers_found.add(tier)
-
-            luminaire_file_name = f"Bline8585D_{length:.3f}m_{tier}"
+            luminaire_name = f"BLine8585D_{length:.3f}m_{tier}"
+            test_field = f"CRI {extracted_cri} | CCT {extracted_cct} | {efficiency_reason} {led_efficiency_gain_percent}%"
 
             row = {
-                "Delete": "🗑️",
+                "🗑️": "Delete",
                 "Length (m)": f"{length:.3f}",
                 "Total Lumens": f"{total_lumens:.1f}",
                 "Total Watts": f"{total_watts:.1f}",
                 "lm/W": f"{new_lm_per_w:.1f}",
                 "CRI": extracted_cri,
                 "CCT": extracted_cct,
-                "Luminaire & IES File Name": luminaire_file_name,
-                "Comments": efficiency_reason if led_efficiency_gain_percent != 0 else ""
+                "Luminaire & IES File Name": luminaire_name,
+                "Comments": test_field
             }
 
             table_rows.append(row)
@@ -161,7 +163,7 @@ if uploaded_file:
         df = pd.DataFrame(table_rows)
 
         gb = GridOptionsBuilder.from_dataframe(df)
-        gb.configure_selection('single', use_checkbox=True)
+        gb.configure_selection('single', use_checkbox=False)
         gb.configure_grid_options(domLayout='normal')
 
         grid_response = AgGrid(
@@ -174,7 +176,7 @@ if uploaded_file:
 
         selected_rows = grid_response.get('selected_rows', [])
 
-        if isinstance(selected_rows, list) and len(selected_rows) > 0:
+        if len(selected_rows) > 0:
             selected_row = selected_rows[0]
             length_value_str = selected_row.get('Length (m)', None)
 
@@ -187,9 +189,6 @@ if uploaded_file:
                         if round(l, 3) != round(length_value, 3)
                     ]
                     st.experimental_rerun()
-
-        if len(product_tiers_found) > 1:
-            st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
 
         st.download_button(
             "Download CSV Summary",
@@ -208,7 +207,7 @@ if uploaded_file:
         for length in st.session_state['lengths_list']:
             scaled_data = modify_candela_data(parsed['data'], 1.0)
             new_file = create_ies_file(parsed['header'], scaled_data)
-            filename = f"Bline8585D_{length:.3f}m.ies"
+            filename = f"Optimised_{length:.3f}m.ies"
             files_to_zip[filename] = new_file
 
         zip_buffer = create_zip(files_to_zip)
