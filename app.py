@@ -12,9 +12,9 @@ if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
 
-    # === Collapsible Base File Summary ===
+    # === Base File Summary ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
-        # === Extract header info ===
+        # Extract header info
         ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found")
         test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
         manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found")
@@ -34,15 +34,11 @@ if uploaded_file:
         st.markdown("### IES Metadata")
         st.table(pd.DataFrame.from_dict(metadata_dict, orient='index', columns=['Value']))
 
-        # === Extract and display 13 Photometric Parameters ===
-        photometric_params = []
-        for line in parsed['data']:
-            numbers = line.strip().split()
-            if len(numbers) >= 13:
-                photometric_params = numbers[:13]
-                break
+        # Extract photometric parameters (already parsed and on one line)
+        photometric_line = parsed['data'][0] if parsed['data'] else ""
+        photometric_params = photometric_line.strip().split()
 
-        if photometric_params:
+        if len(photometric_params) >= 13:
             param_labels = [
                 "Number of Lamps", "Lumens per Lamp", "Candela Multiplier",
                 "Vertical Angles", "Horizontal Angles", "Photometric Type",
@@ -50,13 +46,13 @@ if uploaded_file:
                 "Ballast Factor", "Future Use", "Input Watts"
             ]
 
-            param_data = {label: value for label, value in zip(param_labels, photometric_params)}
+            param_data = {label: value for label, value in zip(param_labels, photometric_params[:13])}
 
             st.markdown("### Photometric Parameters")
             st.table(pd.DataFrame.from_dict(param_data, orient='index', columns=['Value']))
 
         else:
-            st.warning("Photometric Parameters not found in file.")
+            st.warning("Photometric Parameters not found or incomplete.")
 
     # === End Plate & LED Pitch with Lock ===
     st.markdown("## End Plate & LED Pitch Configuration")
