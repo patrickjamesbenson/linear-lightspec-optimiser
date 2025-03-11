@@ -2,11 +2,9 @@ import streamlit as st
 import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
 
-# === STREAMLIT PAGE CONFIG ===
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
 
-# === UPLOAD IES FILE ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
 if uploaded_file:
@@ -46,13 +44,11 @@ if uploaded_file:
     shorter_length_m = round(min_length_mm / 1000, 3)
     longer_length_m = round(max_length_mm / 1000, 3)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button(f"Add Shorter Buildable Length: {shorter_length_m:.3f} m"):
-            st.session_state['lengths_list'].append(shorter_length_m)
-    with col2:
-        if st.button(f"Add Longer Buildable Length: {longer_length_m:.3f} m"):
-            st.session_state['lengths_list'].append(longer_length_m)
+    if st.button(f"Add Shorter Buildable Length: {shorter_length_m:.3f} m"):
+        st.session_state['lengths_list'].append(shorter_length_m)
+
+    if st.button(f"Add Longer Buildable Length: {longer_length_m:.3f} m"):
+        st.session_state['lengths_list'].append(longer_length_m)
 
     # === LED CHIPSET ADJUSTMENT ===
     with st.expander("💡 LED Chipset Adjustment", expanded=False):
@@ -81,11 +77,12 @@ if uploaded_file:
         product_tiers_found = set()
         length_table_data = []
 
+        # Loop over lengths to build table rows
         for idx, length in enumerate(st.session_state['lengths_list']):
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
-            # Product Tier Logic
+            # Product Tier Assignment Logic
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
@@ -97,6 +94,7 @@ if uploaded_file:
 
             product_tiers_found.add(tier)
 
+            # === Assemble the row ===
             row = {
                 "Length (m)": f"{length:.3f}",
                 "Lumens/m": f"{new_lm_per_m:.1f}",
@@ -107,51 +105,41 @@ if uploaded_file:
                 "Product Tier": tier
             }
 
+            # Include LED adjustments if changed
             if led_efficiency_gain_percent != 0:
                 row["Chipset Adj. (%)"] = f"{led_efficiency_gain_percent:.1f}"
                 row["Reason"] = efficiency_reason
 
+            # Include end plate & pitch if altered
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 row["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
                 row["LED Series Pitch (mm)"] = f"{st.session_state['led_pitch']:.1f}"
 
-            length_table_data.append((row, idx))
+            # Add the delete button directly to the row
+            delete_button = st.button("🗑️", key=f"delete_{idx}")
+            if delete_button:
+                st.session_state['lengths_list'].pop(idx)
+                st.experimental_rerun()
 
-        if length_table_data:
-            col_config = list(length_table_data[0][0].keys())
-
-            # Create columns layout
-            header_cols = st.columns([0.5] + [1 for _ in col_config])
-
-            header_cols[0].markdown("🗑️")
-            for i, col in enumerate(col_config):
-                header_cols[i + 1].markdown(f"**{col}**")
-
-            # Display each row with its delete button
-            for row, idx in length_table_data:
-                row_cols = st.columns([0.5] + [1 for _ in col_config])
-
-                if row_cols[0].button("🗑️", key=f"delete_{idx}"):
-                    st.session_state['lengths_list'].pop(idx)
-                    st.experimental_rerun()
-
-                for i, col in enumerate(col_config):
-                    row_cols[i + 1].write(row[col])
+            # Display row
+            st.write(f"🗑️ {row}")
 
         # Display note for mixed tiers
         if len(product_tiers_found) > 1:
             st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
 
-        # Download CSV button
-        data_only = [r for r, _ in length_table_data]
-        df = pd.DataFrame(data_only)
+        # Download CSV of lengths
+        df = pd.DataFrame([{
+            k: v for k, v in row.items() if not k.startswith("🗑️")
+        } for row in length_table_data])
 
-        st.download_button(
-            "Download CSV Summary",
-            data=df.to_csv(index=False).encode('utf-8'),
-            file_name="Selected_Lengths_Summary.csv",
-            mime="text/csv"
-        )
+        if not df.empty:
+            st.download_button(
+                "Download CSV Summary",
+                data=df.to_csv(index=False).encode('utf-8'),
+                file_name="Selected_Lengths_Summary.csv",
+                mime="text/csv"
+            )
 
     else:
         st.info("No lengths selected yet. Click a button above to add lengths.")
