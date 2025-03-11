@@ -128,14 +128,15 @@ if uploaded_file:
     new_lm_per_m = round(base_lm_per_m, 1)
     new_lm_per_w = round(new_lm_per_m / new_w_per_m, 1) if new_w_per_m != 0 else 0.0
 
-    # === SELECTED LENGTHS TABLE ===
+    # === SELECTED LENGTHS TABLE WITH DELETE BUTTONS ===
     if st.session_state['lengths_list']:
         st.markdown("### Selected Lengths for IES Generation")
 
         length_table_data = []
         product_tiers_found = set()
 
-        for length in st.session_state['lengths_list']:
+        # Remove logic handler
+        for idx, length in enumerate(st.session_state['lengths_list']):
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
@@ -167,6 +168,11 @@ if uploaded_file:
             if (st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0):
                 row["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
                 row["LED Series Pitch (mm)"] = f"{st.session_state['led_pitch']:.1f}"
+
+            delete_button_label = f"🗑️ Remove {length:.3f}m"
+            if st.button(delete_button_label, key=f"delete_{idx}"):
+                st.session_state['lengths_list'].pop(idx)
+                st.experimental_rerun()
 
             length_table_data.append(row)
 
