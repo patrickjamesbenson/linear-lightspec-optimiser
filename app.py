@@ -12,44 +12,51 @@ if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
 
-    st.subheader("Base File Summary")
+    # === Collapsible Base File Summary ===
+    with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
+        # === Extract header info ===
+        ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found")
+        test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
+        manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found")
+        lumcat_info = next((line for line in parsed['header'] if line.startswith("[LUMCAT]")), "[LUMCAT] Not Found")
+        luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
+        issuedate_info = next((line for line in parsed['header'] if line.startswith("[ISSUEDATE]")), "[ISSUEDATE] Not Found")
 
-    # === Extract and display metadata ===
-    ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Unknown")
-    test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "Not Provided")
-    manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "Not Provided")
-    lumcat_info = next((line for line in parsed['header'] if line.startswith("[LUMCAT]")), "Not Provided")
-    luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "Not Provided")
+        metadata_dict = {
+            "IES Version": ies_version,
+            "Test Info": test_info,
+            "Manufacturer": manufac_info,
+            "Luminaire Catalog Number": lumcat_info,
+            "Luminaire Description": luminaire_info,
+            "Issued Date": issuedate_info
+        }
 
-    st.markdown(f"""
-    - **IES Version**: {ies_version}
-    - **Test Info**: {test_info}
-    - **Manufacturer**: {manufac_info}
-    - **Luminaire Catalog Number**: {lumcat_info}
-    - **Luminaire Description**: {luminaire_info}
-    """)
+        st.markdown("### IES Metadata")
+        st.table(pd.DataFrame.from_dict(metadata_dict, orient='index', columns=['Value']))
 
-    # === Extract and display 13 Photometric Parameters ===
-    photometric_params = []
-    for line in parsed['data']:
-        numbers = line.strip().split()
-        if len(numbers) >= 13:
-            photometric_params = numbers[:13]
-            break
+        # === Extract and display 13 Photometric Parameters ===
+        photometric_params = []
+        for line in parsed['data']:
+            numbers = line.strip().split()
+            if len(numbers) >= 13:
+                photometric_params = numbers[:13]
+                break
 
-    if photometric_params:
-        st.markdown("### Photometric Parameters")
-        param_labels = [
-            "Number of Lamps", "Lumens per Lamp", "Candela Multiplier",
-            "Vertical Angles", "Horizontal Angles", "Photometric Type",
-            "Units Type", "Width (m)", "Length (m)", "Height (m)",
-            "Ballast Factor", "Future Use", "Input Watts"
-        ]
-        param_data = {label: value for label, value in zip(param_labels, photometric_params)}
+        if photometric_params:
+            param_labels = [
+                "Number of Lamps", "Lumens per Lamp", "Candela Multiplier",
+                "Vertical Angles", "Horizontal Angles", "Photometric Type",
+                "Units Type", "Width (m)", "Length (m)", "Height (m)",
+                "Ballast Factor", "Future Use", "Input Watts"
+            ]
 
-        st.table(pd.DataFrame.from_dict(param_data, orient='index', columns=['Value']))
-    else:
-        st.warning("Photometric Parameters not found in file.")
+            param_data = {label: value for label, value in zip(param_labels, photometric_params)}
+
+            st.markdown("### Photometric Parameters")
+            st.table(pd.DataFrame.from_dict(param_data, orient='index', columns=['Value']))
+
+        else:
+            st.warning("Photometric Parameters not found in file.")
 
     # === End Plate & LED Pitch with Lock ===
     st.markdown("## End Plate & LED Pitch Configuration")
@@ -132,8 +139,8 @@ if uploaded_file:
     # === Comparison Table ===
     st.markdown("## Comparison Table: Base vs Optimised")
 
-    base_lm_per_m = 400  # Placeholder for now
-    base_w_per_m = 20    # Placeholder for now
+    base_lm_per_m = 400  # Placeholder
+    base_w_per_m = 20    # Placeholder
 
     new_lm_per_m = base_lm_per_m * recommended_factor * efficiency_multiplier
     new_w_per_m = base_w_per_m * recommended_factor
