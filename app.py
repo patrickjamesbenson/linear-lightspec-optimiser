@@ -14,6 +14,7 @@ if uploaded_file:
 
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
+        # Metadata + Photometric Parameters (unchanged)
         ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found")
         test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
         manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found")
@@ -110,84 +111,84 @@ if uploaded_file:
     new_lm_per_m = round(base_lm_per_m, 1)
     new_lm_per_w = round(new_lm_per_m / new_w_per_m, 1) if new_w_per_m != 0 else 0.0
 
-    # === AG GRID TABLE FOR LENGTHS ===
-    if st.session_state['lengths_list']:
-        st.markdown("### Selected Lengths for IES Generation")
+    # === SELECTED LENGTHS FOR IES GENERATION ===
+    with st.expander("📏 Selected Lengths for IES Generation", expanded=False):
 
-        product_tiers_found = set()
-        table_rows = []
+        if st.session_state['lengths_list']:
+            product_tiers_found = set()
+            table_rows = []
 
-        for length in st.session_state['lengths_list']:
-            total_lumens = round(new_lm_per_m * length, 1)
-            total_watts = round(new_w_per_m * length, 1)
+            for length in st.session_state['lengths_list']:
+                total_lumens = round(new_lm_per_m * length, 1)
+                total_watts = round(new_w_per_m * length, 1)
 
-            # Product Tier Logic
-            if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
-                tier = "Bespoke"
-            elif led_efficiency_gain_percent != 0:
-                tier = "Professional"
-            elif st.session_state['led_pitch'] % 4 != 0:
-                tier = "Advanced"
-            else:
-                tier = "Core"
+                if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
+                    tier = "Bespoke"
+                elif led_efficiency_gain_percent != 0:
+                    tier = "Professional"
+                elif st.session_state['led_pitch'] % 4 != 0:
+                    tier = "Advanced"
+                else:
+                    tier = "Core"
 
-            product_tiers_found.add(tier)
+                product_tiers_found.add(tier)
 
-            row = {
-                "Length (m)": f"{length:.3f}",
-                "Lumens/m": f"{new_lm_per_m:.1f}",
-                "Watts/m": f"{new_w_per_m:.1f}",
-                "Total Lumens": f"{total_lumens:.1f}",
-                "Total Watts": f"{total_watts:.1f}",
-                "lm/W": f"{new_lm_per_w:.1f}",
-                "Product Tier": tier
-            }
+                row = {
+                    "Length (m)": f"{length:.3f}",
+                    "Lumens/m": f"{new_lm_per_m:.1f}",
+                    "Watts/m": f"{new_w_per_m:.1f}",
+                    "Total Lumens": f"{total_lumens:.1f}",
+                    "Total Watts": f"{total_watts:.1f}",
+                    "lm/W": f"{new_lm_per_w:.1f}",
+                    "Product Tier": tier
+                }
 
-            if led_efficiency_gain_percent != 0:
-                row["Chipset Adj. (%)"] = f"{led_efficiency_gain_percent:.1f}"
-                row["Reason"] = efficiency_reason
+                if led_efficiency_gain_percent != 0:
+                    row["Chipset Adj. (%)"] = f"{led_efficiency_gain_percent:.1f}"
+                    row["Reason"] = efficiency_reason
 
-            if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
-                row["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
-                row["LED Series Pitch (mm)"] = f"{st.session_state['led_pitch']:.1f}"
+                if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
+                    row["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
+                    row["LED Series Pitch (mm)"] = f"{st.session_state['led_pitch']:.1f}"
 
-            table_rows.append(row)
+                table_rows.append(row)
 
-        df = pd.DataFrame(table_rows)
+            df = pd.DataFrame(table_rows)
 
-        gb = GridOptionsBuilder.from_dataframe(df)
-        gb.configure_selection('single', use_checkbox=True)
-        gb.configure_grid_options(domLayout='normal')
+            gb = GridOptionsBuilder.from_dataframe(df)
+            gb.configure_selection('single', use_checkbox=True)
+            gb.configure_grid_options(domLayout='normal')
 
-        grid_response = AgGrid(
-            df,
-            gridOptions=gb.build(),
-            update_mode=GridUpdateMode.SELECTION_CHANGED,
-            height=(len(df) * 35 + 50),
-            allow_unsafe_jscode=True
-        )
+            grid_response = AgGrid(
+                df,
+                gridOptions=gb.build(),
+                update_mode=GridUpdateMode.SELECTION_CHANGED,
+                height=(len(df) * 35 + 50),
+                allow_unsafe_jscode=True
+            )
 
-        selected = grid_response['selected_rows']
-        if selected:
-            length_value = float(selected[0]['Length (m)'])
-            if st.button("🗑️ Delete Selected Length"):
-                st.session_state['lengths_list'] = [l for l in st.session_state['lengths_list'] if round(l, 3) != round(length_value, 3)]
-                st.experimental_rerun()
+            selected = grid_response['selected_rows']
 
-        if len(product_tiers_found) > 1:
-            st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
+            # Safe check if anything is selected
+            if selected and len(selected) > 0:
+                length_value = float(selected[0]['Length (m)'])
+                if st.button("🗑️ Delete Selected Length"):
+                    st.session_state['lengths_list'] = [l for l in st.session_state['lengths_list'] if round(l, 3) != round(length_value, 3)]
+                    st.experimental_rerun()
 
-        st.download_button(
-            "Download CSV Summary",
-            data=df.to_csv(index=False).encode('utf-8'),
-            file_name="Selected_Lengths_Summary.csv",
-            mime="text/csv"
-        )
+            if len(product_tiers_found) > 1:
+                st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
 
-    else:
-        st.info("No lengths selected yet. Click a button above to add lengths.")
+            st.download_button(
+                "Download CSV Summary",
+                data=df.to_csv(index=False).encode('utf-8'),
+                file_name="Selected_Lengths_Summary.csv",
+                mime="text/csv"
+            )
+        else:
+            st.info("No lengths selected yet. Click a button above to add lengths.")
 
-    # === GENERATE IES FILES & DOWNLOAD ===
+    # === GENERATE IES FILES ===
     st.markdown("## Generate Optimised IES Files")
 
     if st.session_state['lengths_list']:
