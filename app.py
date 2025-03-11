@@ -14,7 +14,6 @@ if uploaded_file:
 
     # === Base File Summary ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
-        # Extract header info
         ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found")
         test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
         manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found")
@@ -34,7 +33,6 @@ if uploaded_file:
         st.markdown("### IES Metadata")
         st.table(pd.DataFrame.from_dict(metadata_dict, orient='index', columns=['Value']))
 
-        # Extract photometric parameters (already parsed and on one line)
         photometric_line = parsed['data'][0] if parsed['data'] else ""
         photometric_params = photometric_line.strip().split()
 
@@ -54,31 +52,34 @@ if uploaded_file:
         else:
             st.warning("Photometric Parameters not found or incomplete.")
 
-    # === End Plate & LED Pitch with Lock ===
-    st.markdown("## End Plate & LED Pitch Configuration")
-
-    if 'locked' not in st.session_state:
-        st.session_state['locked'] = False
-        st.session_state['lengths_list'] = []
-
-    if not st.session_state['locked']:
-        end_plate_thickness = st.number_input(
-            "End Plate Expansion Gutter (mm)", min_value=0.0, value=5.5, step=0.1
-        )
-        led_pitch = st.number_input(
-            "LED Series Module Pitch (mm)", min_value=40.0, value=56.0, step=0.1
-        )
-        confirm_lock = st.checkbox("Confirm End Plate & LED Pitch (Do not edit unless you know what you're doing)")
-        if confirm_lock:
-            st.session_state['locked'] = True
-            st.session_state['end_plate_thickness'] = end_plate_thickness
-            st.session_state['led_pitch'] = led_pitch
-    else:
-        end_plate_thickness = st.session_state['end_plate_thickness']
-        led_pitch = st.session_state['led_pitch']
-        st.info(f"Locked: End Plate = {end_plate_thickness}mm | LED Pitch = {led_pitch}mm")
-        if st.button("Unlock Settings"):
+    # === Base Build Methodology (Expander with Lock) ===
+    with st.expander("📂 Base Build Methodology (End Plate & LED Pitch Settings)", expanded=False):
+        if 'locked' not in st.session_state:
             st.session_state['locked'] = False
+            st.session_state['lengths_list'] = []
+
+        if not st.session_state['locked']:
+            st.markdown("⚙️ Adjust these only if you understand the impact on manufacturability.")
+            end_plate_thickness = st.number_input(
+                "End Plate Expansion Gutter (mm)", min_value=0.0, value=5.5, step=0.1
+            )
+            led_pitch = st.number_input(
+                "LED Series Module Pitch (mm)", min_value=40.0, value=56.0, step=0.1
+            )
+            confirm_lock = st.checkbox("✅ Confirm and Lock Base Build Methodology")
+            if confirm_lock:
+                st.session_state['locked'] = True
+                st.session_state['end_plate_thickness'] = end_plate_thickness
+                st.session_state['led_pitch'] = led_pitch
+                st.success(f"Locked: End Plate = {end_plate_thickness}mm | LED Pitch = {led_pitch}mm")
+        else:
+            end_plate_thickness = st.session_state['end_plate_thickness']
+            led_pitch = st.session_state['led_pitch']
+            st.info(f"🔒 Locked: End Plate = {end_plate_thickness}mm | LED Pitch = {led_pitch}mm")
+
+            if st.button("🔓 Unlock Settings"):
+                st.session_state['locked'] = False
+                st.warning("⚠️ Warning: Adjusting the Base Build Methodology impacts manufacturability. Confirm changes before proceeding.")
 
     # === Length Validation ===
     st.markdown("## Length Validation")
@@ -99,7 +100,6 @@ if uploaded_file:
     if st.button("Add Longer Length"):
         st.session_state['lengths_list'].append(round(max_length_mm / 1000, 3))
 
-    # === Show Selected Lengths ===
     if st.session_state['lengths_list']:
         st.markdown("### Selected Lengths for IES Generation")
         lengths_df = pd.DataFrame({
