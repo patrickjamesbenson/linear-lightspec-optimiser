@@ -3,7 +3,6 @@ import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
-# === STREAMLIT PAGE CONFIG ===
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
 
@@ -52,24 +51,6 @@ if uploaded_file:
         else:
             st.warning("Photometric Parameters not found or incomplete.")
 
-    # === EXTRACT CRI & CCT from LUMINAIRE INFO ===
-    import re
-    luminaire_text = luminaire_info.replace("[LUMINAIRE]", "").strip()
-
-    # Defaults
-    extracted_cri = "-"
-    extracted_cct = "-"
-
-    # CRI Extraction (e.g., 80CRI or 90CRI)
-    cri_match = re.search(r'(\d{2})\s*CRI', luminaire_text, re.IGNORECASE)
-    if cri_match:
-        extracted_cri = cri_match.group(1)
-
-    # CCT Extraction (e.g., 3000K)
-    cct_match = re.search(r'(\d{4})\s*K', luminaire_text, re.IGNORECASE)
-    if cct_match:
-        extracted_cct = cct_match.group(1) + "K"
-
     # === BASE BUILD METHODOLOGY ===
     with st.expander("📂 Base Build Methodology", expanded=False):
         if 'locked' not in st.session_state:
@@ -78,13 +59,18 @@ if uploaded_file:
             st.session_state['end_plate_thickness'] = 5.5
             st.session_state['led_pitch'] = 56.0
 
+        # Check if user tries to unlock when lengths exist
         if st.session_state['locked']:
             if st.button("🔓 Unlock Base Build Methodology"):
-                st.session_state['locked'] = False
+                if st.session_state['lengths_list']:
+                    st.warning("⚠️ You cannot edit the Base Build Methodology once lengths are added. Remove all lengths to make changes.")
+                else:
+                    st.session_state['locked'] = False
         else:
             if st.button("🔒 Lock Base Build Methodology"):
                 st.session_state['locked'] = True
 
+        # Show input fields or info message
         if st.session_state['locked']:
             st.info(f"🔒 Locked: End Plate Expansion Gutter = {st.session_state['end_plate_thickness']} mm | LED Series Module Pitch = {st.session_state['led_pitch']} mm")
         else:
@@ -136,10 +122,15 @@ if uploaded_file:
         product_tiers_found = set()
         table_rows = []
 
+        # Extract CRI & CCT from Luminaire info
+        extracted_cri = ''.join(filter(str.isdigit, luminaire_info.split("CRI")[-1].split("-")[0])) if "CRI" in luminaire_info else "N/A"
+        extracted_cct = ''.join(filter(str.isdigit, luminaire_info.split("CRI")[-1].split("-")[-1])) + "K" if "CRI" in luminaire_info else "N/A"
+
         for length in st.session_state['lengths_list']:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
+            # Product Tier Logic in Luminaire & IES File Name
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
@@ -151,22 +142,18 @@ if uploaded_file:
 
             product_tiers_found.add(tier)
 
-            # Luminaire & IES file name
-            luminaire_ies_name = f"Bline8585D_{length:.3f}m_{tier}"
-
-            # Comments (reason only)
-            comments = efficiency_reason if led_efficiency_gain_percent != 0 else "-"
+            luminaire_file_name = f"Bline8585D_{length:.3f}m_{tier}"
 
             row = {
+                "Delete": "🗑️",
                 "Length (m)": f"{length:.3f}",
                 "Total Lumens": f"{total_lumens:.1f}",
                 "Total Watts": f"{total_watts:.1f}",
                 "lm/W": f"{new_lm_per_w:.1f}",
                 "CRI": extracted_cri,
                 "CCT": extracted_cct,
-                "Product Tier": tier,
-                "Luminaire & IES File Name": luminaire_ies_name,
-                "Comments": comments
+                "Luminaire & IES File Name": luminaire_file_name,
+                "Comments": efficiency_reason if led_efficiency_gain_percent != 0 else ""
             }
 
             table_rows.append(row)
@@ -221,7 +208,7 @@ if uploaded_file:
         for length in st.session_state['lengths_list']:
             scaled_data = modify_candela_data(parsed['data'], 1.0)
             new_file = create_ies_file(parsed['header'], scaled_data)
-            filename = f"Bline8585D_{length:.3f}m_{tier}.ies"
+            filename = f"Bline8585D_{length:.3f}m.ies"
             files_to_zip[filename] = new_file
 
         zip_buffer = create_zip(files_to_zip)
