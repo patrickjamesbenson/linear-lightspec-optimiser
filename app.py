@@ -109,17 +109,18 @@ if uploaded_file:
     new_lm_per_m = round(base_lm_per_m, 1)
     new_lm_per_w = round(new_lm_per_m / new_w_per_m, 1) if new_w_per_m != 0 else 0.0
 
-    # === SELECTED LENGTHS TABLE WITH TIGHT BIN ICON ===
+    # === SINGLE TABLE WITH BIN ICON COLUMN ===
     if st.session_state['lengths_list']:
         st.markdown("### Selected Lengths for IES Generation")
-        product_tiers_found = set()
 
-        length_table_data_csv = []  # For CSV generation
+        table_rows = []
+        product_tiers_found = set()
 
         for idx, length in enumerate(st.session_state['lengths_list']):
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
 
+            # Determine product tier
             if (st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0):
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
@@ -131,8 +132,8 @@ if uploaded_file:
 
             product_tiers_found.add(tier)
 
-            # Build a row for CSV export
-            row_csv = {
+            row = {
+                "🗑️": f"delete_{idx}",  # Button key for deletion
                 "Length (m)": f"{length:.3f}",
                 "Lumens/m": f"{new_lm_per_m:.1f}",
                 "Watts/m": f"{new_w_per_m:.1f}",
@@ -142,32 +143,38 @@ if uploaded_file:
                 "Product Tier": tier
             }
 
+            # Optional columns
             if led_efficiency_gain_percent != 0:
-                row_csv["Chipset Adj. (%)"] = f"{led_efficiency_gain_percent:.1f}"
-                row_csv["Reason"] = efficiency_reason
+                row["Chipset Adj. (%)"] = f"{led_efficiency_gain_percent:.1f}"
+                row["Reason"] = efficiency_reason
 
             if (st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0):
-                row_csv["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
-                row_csv["LED Series Pitch (mm)"] = f"{st.session_state['led_pitch']:.1f}"
+                row["End Plate (mm)"] = f"{st.session_state['end_plate_thickness']:.1f}"
+                row["LED Series Pitch (mm)"] = f"{st.session_state['led_pitch']:.1f}"
 
-            length_table_data_csv.append(row_csv)
+            table_rows.append((idx, row))
 
-            # Layout with bin icon inline, tight spacing
-            cols = st.columns([0.05, 0.95])
-            with cols[0]:
-                if st.button("🗑️", key=f"delete_{idx}"):
+        # Render table with bins in first column
+        cols = st.columns([0.05, 0.95])
+        with cols[1]:
+            df_rows = [row for idx, row in table_rows]
+            df = pd.DataFrame(df_rows).drop(columns=["🗑️"])
+            st.dataframe(df.style.format(precision=1), height=(len(df_rows) * 35 + 50))
+
+        with cols[0]:
+            for idx, row in table_rows:
+                if st.button("🗑️", key=row["🗑️"]):
                     st.session_state['lengths_list'].pop(idx)
                     st.experimental_rerun()
-
-            with cols[1]:
-                st.dataframe(pd.DataFrame([row_csv]).style.format(precision=1), height=80)
 
         if len(product_tiers_found) > 1:
             st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
 
+        # Download CSV
+        lengths_df_csv = df.copy()
         st.download_button(
             "Download CSV Summary",
-            data=pd.DataFrame(length_table_data_csv).to_csv(index=False).encode('utf-8'),
+            data=lengths_df_csv.to_csv(index=False).encode('utf-8'),
             file_name="Selected_Lengths_Summary.csv",
             mime="text/csv"
         )
