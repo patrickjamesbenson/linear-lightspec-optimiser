@@ -1,5 +1,7 @@
-streamlit
-pandas
-numpy
-io
-zipfile36
+streamlit==1.32.0
+pandas==2.2.1
+numpy==1.26.4
+markdown-it-py==3.0.0
+pygments==2.19.1
+mdurl==0.1.2
+rich==13.9.4
