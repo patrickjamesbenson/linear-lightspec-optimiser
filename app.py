@@ -3,6 +3,7 @@ import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
+# === STREAMLIT PAGE CONFIG ===
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
 
@@ -50,6 +51,24 @@ if uploaded_file:
             st.table(pd.DataFrame.from_dict(param_data, orient='index', columns=['Value']))
         else:
             st.warning("Photometric Parameters not found or incomplete.")
+
+    # === EXTRACT CRI & CCT from LUMINAIRE INFO ===
+    import re
+    luminaire_text = luminaire_info.replace("[LUMINAIRE]", "").strip()
+
+    # Defaults
+    extracted_cri = "-"
+    extracted_cct = "-"
+
+    # CRI Extraction (e.g., 80CRI or 90CRI)
+    cri_match = re.search(r'(\d{2})\s*CRI', luminaire_text, re.IGNORECASE)
+    if cri_match:
+        extracted_cri = cri_match.group(1)
+
+    # CCT Extraction (e.g., 3000K)
+    cct_match = re.search(r'(\d{4})\s*K', luminaire_text, re.IGNORECASE)
+    if cct_match:
+        extracted_cct = cct_match.group(1) + "K"
 
     # === BASE BUILD METHODOLOGY ===
     with st.expander("📂 Base Build Methodology", expanded=False):
@@ -110,32 +129,6 @@ if uploaded_file:
     new_lm_per_m = round(base_lm_per_m, 1)
     new_lm_per_w = round(new_lm_per_m / new_w_per_m, 1) if new_w_per_m != 0 else 0.0
 
-    # === METADATA GENERATION ===
-    product_tier = "Core"
-    if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
-        product_tier = "Bespoke"
-    elif led_efficiency_gain_percent != 0:
-        product_tier = "Professional"
-    elif st.session_state['led_pitch'] % 4 != 0:
-        product_tier = "Advanced"
-
-    luminaire_type = "Bline8585D"
-    luminaire_length = f"{desired_length_m:.3f}m"
-    luminaire_field = f"{luminaire_type}_{luminaire_length}_{product_tier}"
-
-    test_field = f"{new_w_per_m}W_90CRI_3000K"
-    if led_efficiency_gain_percent != 0:
-        test_field += f" | Adjusted for Chipset Efficiency +{led_efficiency_gain_percent}%"
-
-    # === PREVIEW METADATA SECTION ===
-    st.markdown("## 📝 Metadata Preview for IES File")
-    preview_data = {
-        "Luminaire Field": luminaire_field,
-        "Test Field": test_field,
-        "IES File Name": f"{luminaire_field}.ies"
-    }
-    st.table(pd.DataFrame.from_dict(preview_data, orient='index', columns=['Value']))
-
     # === SELECTED LENGTHS FOR IES GENERATION ===
     st.markdown("## 📏 Selected Lengths for IES Generation")
 
@@ -158,12 +151,22 @@ if uploaded_file:
 
             product_tiers_found.add(tier)
 
+            # Luminaire & IES file name
+            luminaire_ies_name = f"Bline8585D_{length:.3f}m_{tier}"
+
+            # Comments (reason only)
+            comments = efficiency_reason if led_efficiency_gain_percent != 0 else "-"
+
             row = {
                 "Length (m)": f"{length:.3f}",
                 "Total Lumens": f"{total_lumens:.1f}",
                 "Total Watts": f"{total_watts:.1f}",
                 "lm/W": f"{new_lm_per_w:.1f}",
-                "Product Tier": tier
+                "CRI": extracted_cri,
+                "CCT": extracted_cct,
+                "Product Tier": tier,
+                "Luminaire & IES File Name": luminaire_ies_name,
+                "Comments": comments
             }
 
             table_rows.append(row)
@@ -217,15 +220,8 @@ if uploaded_file:
         files_to_zip = {}
         for length in st.session_state['lengths_list']:
             scaled_data = modify_candela_data(parsed['data'], 1.0)
-            header = parsed['header']
-
-            # Add generated fields into header (overwrite)
-            header = [line for line in header if not line.startswith("[LUMINAIRE]") and not line.startswith("[TEST]")]
-            header.insert(0, f"[LUMINAIRE] {luminaire_field}")
-            header.insert(1, f"[TEST] {test_field}")
-
-            new_file = create_ies_file(header, scaled_data)
-            filename = f"{luminaire_type}_{length:.3f}m_{product_tier}.ies"
+            new_file = create_ies_file(parsed['header'], scaled_data)
+            filename = f"Bline8585D_{length:.3f}m_{tier}.ies"
             files_to_zip[filename] = new_file
 
         zip_buffer = create_zip(files_to_zip)
