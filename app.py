@@ -7,8 +7,9 @@ from datetime import datetime
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
 
-# === FILE UPLOAD ===
-uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
+# === SYSTEM CONSTANTS ===
+SYSTEM_LM_W_INCREMENT = 115  # Adjustable in future if needed
+DEFAULT_LM_PER_M = 400.0     # This should be dynamically extracted later
 
 # === INITIALISE SESSION STATE ===
 if 'locked' not in st.session_state:
@@ -20,8 +21,8 @@ if 'locked' not in st.session_state:
     st.session_state['efficiency_reason'] = 'Current Generation'
     st.session_state['export_id'] = datetime.now().strftime("%Y%m%d%H%M%S")
 
-# === SYSTEM LM/W INCREMENT ===
-SYSTEM_LM_W_INCREMENT = 115  # Editable in the GUI if desired later
+# === FILE UPLOAD ===
+uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
@@ -37,8 +38,8 @@ if uploaded_file:
     if luminaire_name_base != "Not Found":
         parts = luminaire_name_base.split('-')
         if len(parts) >= 3:
-            cri_value = parts[-2].strip()
-            cct_value = parts[-1].strip()
+            cri_value = parts[-2].strip()  # 80CRI
+            cct_value = parts[-1].strip()  # 3000K
 
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
@@ -128,33 +129,8 @@ if uploaded_file:
         st.session_state['led_efficiency_gain_percent'] = led_efficiency_gain_percent
         st.session_state['efficiency_reason'] = efficiency_reason
 
-    # === DESIGN OPTIMISATION SECTION ===
-    with st.expander("🎯 Design Optimisation", expanded=True):
-        st.markdown("Use this section to adjust and optimise design outcomes.")
-
-        design_target_lux = st.number_input("Target Lux Level", min_value=10, max_value=10000, value=400)
-        achieved_lux = st.number_input("Achieved Lux Level", min_value=10, max_value=10000, value=400)
-
-        if achieved_lux == 0:
-            st.error("Achieved lux can't be zero.")
-        else:
-            lux_difference_percent = ((design_target_lux - achieved_lux) / achieved_lux) * 100
-            st.write(f"Difference: {lux_difference_percent:.1f}%")
-
-            if abs(lux_difference_percent) <= 5:
-                st.success("✅ Within tolerance. No action required.")
-            else:
-                step_change = int(abs(lux_difference_percent) / SYSTEM_LM_W_INCREMENT)
-                action = "Reduce" if lux_difference_percent < 0 else "Increase"
-
-                st.warning(f"⚠️ Consider {action} lm/W by {step_change} increments.")
-                st.write(f"→ Recommend adjusting to a different IES file or dimming control.")
-
-        # Drag & drop IES replacement (future hook)
-        st.file_uploader("Upload New Optimised IES File (optional)", type=["ies"])
-
     # === BASE LUMENS/WATTS FROM IES ===
-    base_lm_per_m = 400.0
+    base_lm_per_m = DEFAULT_LM_PER_M
     base_w_per_m = 11.6
     efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
     new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
@@ -216,7 +192,6 @@ if uploaded_file:
             for col, val in zip(row_cols[1:], row_data):
                 col.write(val)
 
-        # Export CSV (excluding Delete column)
         export_df = pd.DataFrame([{
             "Length (m)": r["Length (m)"],
             "Luminaire & IES File Name": r["Luminaire & IES File Name"],
@@ -233,6 +208,35 @@ if uploaded_file:
     else:
         st.info("No lengths selected yet. Click a button above to add lengths.")
 
+    # === DESIGN OPTIMISATION SECTION ===
+    with st.expander("🎯 Design Optimisation", expanded=True):
+        st.markdown("Use this section to adjust and optimise design outcomes.")
+
+        design_target_lux = st.number_input("Target Lux Level", min_value=10, max_value=10000, value=400)
+        achieved_lux = st.number_input("Achieved Lux Level", min_value=10, max_value=10000, value=700)
+
+        current_lm_per_m = DEFAULT_LM_PER_M
+
+        if achieved_lux == 0:
+            st.error("Achieved lux can't be zero.")
+        else:
+            lux_difference_percent = (design_target_lux - achieved_lux) / achieved_lux
+            st.write(f"Difference: {lux_difference_percent * 100:.1f}%")
+
+            lumens_per_m_adjustment = current_lm_per_m * abs(lux_difference_percent)
+            increments_needed = lumens_per_m_adjustment / SYSTEM_LM_W_INCREMENT
+
+            st.markdown(f"Current Lumens/m: **{current_lm_per_m:.1f} lm/m**")
+            st.markdown(f"You need to {'reduce' if lux_difference_percent < 0 else 'increase'} lumens/m by **{lumens_per_m_adjustment:.1f} lm/m**")
+            st.markdown(f"This equals approximately **{increments_needed:.2f} increments**")
+
+            if increments_needed >= 1:
+                st.warning(f"⚠️ Recommend adjusting by **{round(increments_needed)} increments** or uploading a new IES file closer to the target.")
+            else:
+                st.success("✅ Within tolerance. No action required.")
+
+        st.file_uploader("Upload New Optimised IES File (optional)", type=["ies"])
+
     # === GENERATE IES FILES ===
     st.markdown("## Generate Optimised IES Files")
 
@@ -241,7 +245,6 @@ if uploaded_file:
         for length in st.session_state['lengths_list']:
             scaled_data = modify_candela_data(parsed['data'], 1.0)
 
-            # Add export ID to [TEST]
             updated_header = []
             for line in parsed['header']:
                 if line.startswith("[TEST]"):
@@ -249,11 +252,12 @@ if uploaded_file:
                 else:
                     updated_header.append(line)
 
-            filename = f"{luminaire_name_base}_{length:.3f}m.ies"
             new_file = create_ies_file(updated_header, scaled_data)
+            filename = f"{luminaire_name_base}_{length:.3f}m.ies"
             files_to_zip[filename] = new_file
 
         zip_buffer = create_zip(files_to_zip)
+
         st.download_button("Generate IES Files & Download ZIP", data=zip_buffer, file_name="Optimised_IES_Files.zip", mime="application/zip")
 
 else:
