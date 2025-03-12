@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
+import datetime
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
@@ -9,9 +10,26 @@ st.title("Linear LightSpec Optimiser")
 # === FILE UPLOAD ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
+# === Generate Export ID ===
+now = datetime.datetime.now()
+export_id = now.strftime("%Y%m%d%H%M%S")
+
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
+
+    # === Extract Luminaire Name from Metadata ===
+    luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
+    luminaire_name_base = luminaire_info.replace("[LUMINAIRE]", "").strip()
+
+    # === Extract CRI and CCT ===
+    cri_value = "N/A"
+    cct_value = "N/A"
+    if luminaire_name_base != "Not Found":
+        parts = luminaire_name_base.split('-')
+        if len(parts) >= 3:
+            cri_value = parts[-2].strip()  # e.g. "80CRI"
+            cct_value = parts[-1].strip()  # e.g. "3000K"
 
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
@@ -19,7 +37,6 @@ if uploaded_file:
         test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
         manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found")
         lumcat_info = next((line for line in parsed['header'] if line.startswith("[LUMCAT]")), "[LUMCAT] Not Found")
-        luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
         issuedate_info = next((line for line in parsed['header'] if line.startswith("[ISSUEDATE]")), "[ISSUEDATE] Not Found")
 
         metadata_dict = {
@@ -97,14 +114,24 @@ if uploaded_file:
     # === LED CHIPSET ADJUSTMENT ===
     with st.expander("💡 LED Chipset Adjustment", expanded=False):
         led_efficiency_gain_percent = st.number_input("LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0, value=st.session_state.get('led_efficiency_gain_percent', 0.0), step=1.0)
-        efficiency_reason = st.text_input("Reason (e.g., Gen 2 LED +15% increase lumen output)", value=st.session_state.get('efficiency_reason', 'Current Generation'))
+        efficiency_reason = st.text_input("Reason", value=st.session_state.get('efficiency_reason', 'Current Generation'))
 
-        if led_efficiency_gain_percent != 0 and (efficiency_reason.strip() == "" or efficiency_reason == "Current Generation"):
+        if led_efficiency_gain_percent != 0 and efficiency_reason.strip() == "":
             st.error("⚠️ You must provide a reason for the LED Chipset Adjustment before proceeding.")
             st.stop()
 
         st.session_state['led_efficiency_gain_percent'] = led_efficiency_gain_percent
         st.session_state['efficiency_reason'] = efficiency_reason
+
+    # === SYSTEM lm/W EFFICIENCY INCREMENT ===
+    with st.expander("🔒 System lm/W Efficiency Increment", expanded=False):
+        st.markdown("""
+        **115 lm/W is the standard efficiency increment in our range.**
+        
+        This field is editable for future updates. Only adjust if you understand the impact.
+        """)
+        system_lm_w_increment = st.number_input("System lm/W Efficiency Increment", min_value=50, max_value=200, value=115)
+        st.session_state['system_lm_w_increment'] = system_lm_w_increment
 
     # === BASE LUMENS/WATTS FROM IES ===
     base_lm_per_m = 400.0
@@ -117,11 +144,8 @@ if uploaded_file:
     st.markdown("## 📏 Selected Lengths for IES Generation")
 
     if st.session_state['lengths_list']:
-        table_headers = ["Delete", "Length (m)", "Luminaire & IES File Name", "CRI", "CCT", "Total Lumens", "Total Watts", "Settings lm/W", "Comments"]
-
-        header_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
-        for col, header in zip(header_cols, table_headers):
-            col.markdown(f"**{header}**")
+        table_rows = []
+        delete_index = None
 
         for idx, length in enumerate(st.session_state['lengths_list']):
             total_lumens = round(new_lm_per_m * length, 1)
@@ -137,44 +161,72 @@ if uploaded_file:
             else:
                 tier = "Core"
 
-            luminaire_file_name = f"[LUMINAIRE]_{length:.3f}m_{tier}"
+            luminaire_file_name = f"{luminaire_name_base}_{length:.3f}m_{tier}"
 
-            row_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
+            row = {
+                "Delete": "🗑️",
+                "Length (m)": f"{length:.3f}",
+                "Luminaire & IES File Name": luminaire_file_name,
+                "CRI": cri_value,
+                "CCT": cct_value,
+                "Total Lumens": f"{total_lumens:.1f}",
+                "Total Watts": f"{total_watts:.1f}",
+                "Settings lm/W": f"{lm_per_w:.1f}",
+                "Comments": efficiency_reason if led_efficiency_gain_percent != 0 else ""
+            }
 
-            if row_cols[0].button("🗑️", key=f"del_{idx}"):
-                st.session_state['lengths_list'].pop(idx)
+            table_rows.append(row)
+
+        df = pd.DataFrame(table_rows)
+
+        for i, row in df.iterrows():
+            cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
+            delete_button = cols[0].button("🗑️", key=f"delete_{i}")
+
+            if delete_button:
+                st.session_state['lengths_list'].pop(i)
                 st.rerun()
 
-            row_cols[1].write(f"{length:.3f}")
-            row_cols[2].write(luminaire_file_name)
-            row_cols[3].write("80")
-            row_cols[4].write("3000K")
-            row_cols[5].write(f"{total_lumens:.1f}")
-            row_cols[6].write(f"{total_watts:.1f}")
-            row_cols[7].write(f"{lm_per_w:.1f}")
-            row_cols[8].write(efficiency_reason if led_efficiency_gain_percent != 0 else "")
+            cols[1].write(row["Length (m)"])
+            cols[2].write(row["Luminaire & IES File Name"])
+            cols[3].write(row["CRI"])
+            cols[4].write(row["CCT"])
+            cols[5].write(row["Total Lumens"])
+            cols[6].write(row["Total Watts"])
+            cols[7].write(row["Settings lm/W"])
+            cols[8].write(row["Comments"])
 
-        st.download_button("Download CSV Summary", data=pd.DataFrame({
-            "Length (m)": [f"{l:.3f}" for l in st.session_state['lengths_list']],
-        }).to_csv(index=False).encode('utf-8'), file_name="Selected_Lengths_Summary.csv", mime="text/csv")
+        st.download_button(
+            "Download CSV Summary",
+            data=df.to_csv(index=False).encode('utf-8'),
+            file_name=f"Selected_Lengths_Summary_{export_id}.csv",
+            mime="text/csv"
+        )
 
     else:
-        st.info("No lengths selected yet. Click above to add lengths.")
+        st.info("No lengths selected yet. Click a button above to add lengths.")
 
     # === GENERATE IES FILES ===
     st.markdown("## Generate Optimised IES Files")
 
     if st.session_state['lengths_list']:
         files_to_zip = {}
+
         for length in st.session_state['lengths_list']:
             scaled_data = modify_candela_data(parsed['data'], 1.0)
-            new_file = create_ies_file(parsed['header'], scaled_data)
+            new_header = parsed['header'] + [f"[EXPORT_ID] {export_id}"]
+            new_file = create_ies_file(new_header, scaled_data)
             filename = f"Optimised_{length:.3f}m.ies"
             files_to_zip[filename] = new_file
 
         zip_buffer = create_zip(files_to_zip)
 
-        st.download_button("Generate IES Files & Download ZIP", data=zip_buffer, file_name="Optimised_IES_Files.zip", mime="application/zip")
+        st.download_button(
+            label="Generate IES Files & Download ZIP",
+            data=zip_buffer,
+            file_name=f"Optimised_IES_Files_{export_id}.zip",
+            mime="application/zip"
+        )
 
 else:
     st.info("Upload an IES file to begin optimisation.")
