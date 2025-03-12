@@ -7,9 +7,6 @@ from datetime import datetime
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
 
-# === FILE UPLOAD ===
-uploaded_file = st.file_uploader("Upload your Base IES file", type=["ies"])
-
 # === INITIALISE SESSION STATE ===
 if 'locked' not in st.session_state:
     st.session_state['locked'] = True
@@ -19,6 +16,9 @@ if 'locked' not in st.session_state:
     st.session_state['led_efficiency_gain_percent'] = 0.0
     st.session_state['efficiency_reason'] = 'Current Generation'
     st.session_state['export_id'] = datetime.now().strftime("%Y%m%d%H%M%S")
+
+# === FILE UPLOAD ===
+uploaded_file = st.file_uploader("Upload your Base IES file", type=["ies"])
 
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
@@ -67,7 +67,6 @@ if uploaded_file:
                 "Units Type", "Width (m)", "Length (m)", "Height (m)",
                 "Ballast Factor", "Future Use", "Input Watts"
             ]
-
             param_data = {label: value for label, value in zip(param_labels, photometric_params[:13])}
             st.markdown("### Photometric Parameters")
             st.table(pd.DataFrame.from_dict(param_data, orient='index', columns=['Value']))
@@ -111,12 +110,8 @@ if uploaded_file:
 
     # === LED CHIPSET ADJUSTMENT ===
     with st.expander("💡 LED Chipset Adjustment", expanded=False):
-        led_efficiency_gain_percent = st.number_input("LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0,
-                                                      value=st.session_state.get('led_efficiency_gain_percent', 0.0),
-                                                      step=1.0)
-
-        efficiency_reason = st.text_input("Reason (e.g., Gen 2 LED +15% increase lumen output)",
-                                          value=st.session_state.get('efficiency_reason', 'Current Generation'))
+        led_efficiency_gain_percent = st.number_input("LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0, value=st.session_state['led_efficiency_gain_percent'], step=1.0)
+        efficiency_reason = st.text_input("Reason (e.g., Gen 2 LED +15% increase lumen output)", value=st.session_state['efficiency_reason'])
 
         if led_efficiency_gain_percent != 0 and (efficiency_reason.strip() == "" or efficiency_reason == "Current Generation"):
             st.error("⚠️ You must provide a reason for the LED Chipset Adjustment before proceeding.")
@@ -168,13 +163,12 @@ if uploaded_file:
 
             table_rows.append(row)
 
-        # Display Table Headers
+        # Display Table
         header_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
         headers = ["", "Length (m)", "Luminaire & IES File Name", "CRI", "CCT", "Total Lumens", "Total Watts", "Settings lm/W", "Comments"]
         for col, h in zip(header_cols, headers):
             col.markdown(f"**{h}**")
 
-        # Display Rows
         for idx, row in enumerate(table_rows):
             row_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
 
@@ -182,13 +176,10 @@ if uploaded_file:
                 st.session_state['lengths_list'].pop(idx)
                 st.rerun()
 
-            row_data = [row["Length (m)"], row["Luminaire & IES File Name"], row["CRI"], row["CCT"],
-                        row["Total Lumens"], row["Total Watts"], row["Settings lm/W"], row["Comments"]]
-
+            row_data = [row["Length (m)"], row["Luminaire & IES File Name"], row["CRI"], row["CCT"], row["Total Lumens"], row["Total Watts"], row["Settings lm/W"], row["Comments"]]
             for col, val in zip(row_cols[1:], row_data):
                 col.write(val)
 
-        # Export CSV (excluding Delete column)
         export_df = pd.DataFrame([{
             "Length (m)": r["Length (m)"],
             "Luminaire & IES File Name": r["Luminaire & IES File Name"],
@@ -213,7 +204,6 @@ if uploaded_file:
         for length in st.session_state['lengths_list']:
             scaled_data = modify_candela_data(parsed['data'], 1.0)
 
-            # Add export ID to [TEST]
             updated_header = []
             for line in parsed['header']:
                 if line.startswith("[TEST]"):
