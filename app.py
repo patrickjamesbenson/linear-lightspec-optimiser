@@ -13,13 +13,26 @@ if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
 
+    # === EXTRACT Luminaire Info, CRI, CCT ===
+    luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
+    luminaire_name_base = luminaire_info.replace("[LUMINAIRE]", "").strip()
+
+    # Default CRI/CCT if not found
+    cri_value = "N/A"
+    cct_value = "N/A"
+
+    if luminaire_name_base != "Not Found":
+        parts = luminaire_name_base.split('-')
+        if len(parts) >= 3:
+            cri_value = parts[-2].strip()  # Example: 80CRI
+            cct_value = parts[-1].strip()  # Example: 3000K
+
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
         ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found")
         test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
         manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found")
         lumcat_info = next((line for line in parsed['header'] if line.startswith("[LUMCAT]")), "[LUMCAT] Not Found")
-        luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
         issuedate_info = next((line for line in parsed['header'] if line.startswith("[ISSUEDATE]")), "[ISSUEDATE] Not Found")
 
         metadata_dict = {
@@ -60,12 +73,15 @@ if uploaded_file:
             st.session_state['end_plate_thickness'] = 5.5
             st.session_state['led_pitch'] = 56.0
 
-        if st.session_state['locked']:
-            if st.button("🔓 Unlock Base Build Methodology"):
-                st.session_state['locked'] = False
+        if st.session_state['lengths_list']:
+            st.info("🔒 Base Build locked because lengths have been selected.")
         else:
-            if st.button("🔒 Lock Base Build Methodology"):
-                st.session_state['locked'] = True
+            if st.session_state['locked']:
+                if st.button("🔓 Unlock Base Build Methodology"):
+                    st.session_state['locked'] = False
+            else:
+                if st.button("🔒 Lock Base Build Methodology"):
+                    st.session_state['locked'] = True
 
         if st.session_state['locked']:
             st.info(f"🔒 Locked: End Plate Expansion Gutter = {st.session_state['end_plate_thickness']} mm | LED Series Module Pitch = {st.session_state['led_pitch']} mm")
@@ -109,26 +125,24 @@ if uploaded_file:
     efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
     new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
     new_lm_per_m = round(base_lm_per_m, 1)
-    new_lm_per_w = round(new_lm_per_m / new_w_per_m, 1) if new_w_per_m != 0 else 0.0
 
     # === SELECTED LENGTHS TABLE ===
     st.markdown("## 📏 Selected Lengths for IES Generation")
 
     if st.session_state['lengths_list']:
-        product_tiers_found = set()
-
-        # Headers
-        header_cols = st.columns([1, 2, 2, 2, 2, 2, 2, 2])
-        headers = ["", "Length (m)", "Lumens/m", "Watts/m", "Total Lumens", "Total Watts", "lm/W", "Product Tier"]
+        # HEADERS
+        header_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 2])
+        headers = ["", "Length (m)", "Luminaire & IES File Name", "CRI", "CCT", "Total Lumens", "Total Watts", "Settings lm/W", "Comments"]
         for col, h in zip(header_cols, headers):
             col.markdown(f"**{h}**")
 
-        # Rows
+        # DATA ROWS
         for idx, length in enumerate(st.session_state['lengths_list']):
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
+            lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
 
-            # Tier logic
+            # Product Tier Logic
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
@@ -138,39 +152,34 @@ if uploaded_file:
             else:
                 tier = "Core"
 
-            product_tiers_found.add(tier)
+            luminaire_file_name = f"{luminaire_name_base}_{length:.3f}m_{tier}"
+            comments = efficiency_reason if led_efficiency_gain_percent != 0 else ""
 
-            row_cols = st.columns([1, 2, 2, 2, 2, 2, 2, 2])
+            row_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 2])
 
             if row_cols[0].button("🗑️", key=f"del_{idx}"):
                 st.session_state['lengths_list'].pop(idx)
+                st.experimental_rerun()
 
-            values = [
-                f"{length:.3f}",
-                f"{new_lm_per_m:.1f}",
-                f"{new_w_per_m:.1f}",
-                f"{total_lumens:.1f}",
-                f"{total_watts:.1f}",
-                f"{new_lm_per_w:.1f}",
-                tier
-            ]
-            for col, val in zip(row_cols[1:], values):
-                col.write(val)
+            row_cols[1].write(f"{length:.3f}")
+            row_cols[2].write(luminaire_file_name)
+            row_cols[3].write(cri_value)
+            row_cols[4].write(cct_value)
+            row_cols[5].write(f"{total_lumens:.1f}")
+            row_cols[6].write(f"{total_watts:.1f}")
+            row_cols[7].write(f"{lm_per_w:.1f}")
+            row_cols[8].write(comments)
 
-        if len(product_tiers_found) > 1:
-            st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
-
-        # CSV Download
+        # CSV Export
         df = pd.DataFrame([{
             "Length (m)": f"{length:.3f}",
-            "Lumens/m": f"{new_lm_per_m:.1f}",
-            "Watts/m": f"{new_w_per_m:.1f}",
-            "Total Lumens": f"{round(new_lm_per_m * length, 1)}",
-            "Total Watts": f"{round(new_w_per_m * length, 1)}",
-            "lm/W": f"{new_lm_per_w:.1f}",
-            "Product Tier": "Bespoke" if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0 else
-                            "Professional" if led_efficiency_gain_percent != 0 else
-                            "Advanced" if st.session_state['led_pitch'] % 4 != 0 else "Core"
+            "Luminaire & IES File Name": f"{luminaire_name_base}_{length:.3f}m_{tier}",
+            "CRI": cri_value,
+            "CCT": cct_value,
+            "Total Lumens": round(new_lm_per_m * length, 1),
+            "Total Watts": round(new_w_per_m * length, 1),
+            "Settings lm/W": lm_per_w,
+            "Comments": comments
         } for length in st.session_state['lengths_list']])
 
         st.download_button("Download CSV Summary", data=df.to_csv(index=False).encode('utf-8'), file_name="Selected_Lengths_Summary.csv", mime="text/csv")
