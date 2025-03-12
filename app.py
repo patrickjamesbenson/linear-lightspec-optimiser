@@ -14,6 +14,15 @@ if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
 
+    # === INIT SESSION STATE ===
+    if 'locked' not in st.session_state:
+        st.session_state['locked'] = True
+        st.session_state['lengths_list'] = []
+        st.session_state['end_plate_thickness'] = 5.5
+        st.session_state['led_pitch'] = 56.0
+        st.session_state['led_efficiency_gain_percent'] = 0.0
+        st.session_state['efficiency_reason'] = 'Current Generation'
+
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
         ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found")
@@ -45,6 +54,7 @@ if uploaded_file:
                 "Units Type", "Width (m)", "Length (m)", "Height (m)",
                 "Ballast Factor", "Future Use", "Input Watts"
             ]
+
             param_data = {label: value for label, value in zip(param_labels, photometric_params[:13])}
 
             st.markdown("### Photometric Parameters")
@@ -54,18 +64,11 @@ if uploaded_file:
 
     # === BASE BUILD METHODOLOGY ===
     with st.expander("📂 Base Build Methodology", expanded=False):
-        if 'locked' not in st.session_state:
-            st.session_state['locked'] = True
-            st.session_state['lengths_list'] = []
-            st.session_state['end_plate_thickness'] = 5.5
-            st.session_state['led_pitch'] = 56.0
 
-        if st.session_state['locked']:
-            if st.button("🔓 Unlock Base Build Methodology"):
-                st.session_state['locked'] = False
-        else:
-            if st.button("🔒 Lock Base Build Methodology"):
-                st.session_state['locked'] = True
+        # Check for lock state based on selected lengths
+        if len(st.session_state['lengths_list']) > 0:
+            st.session_state['locked'] = True
+            st.info("🔒 Base Build Methodology locked because lengths have been selected. Clear all lengths to unlock.")
 
         if st.session_state['locked']:
             st.info(f"🔒 Locked: End Plate Expansion Gutter = {st.session_state['end_plate_thickness']} mm | LED Series Module Pitch = {st.session_state['led_pitch']} mm")
@@ -74,10 +77,12 @@ if uploaded_file:
             st.session_state['end_plate_thickness'] = st.number_input("End Plate Expansion Gutter (mm)", min_value=0.0, value=5.5, step=0.1)
             st.session_state['led_pitch'] = st.number_input("LED Series Module Pitch (mm)", min_value=14.0, value=56.0, step=0.1)
 
-        # Lock after length is selected
-        if st.session_state['lengths_list']:
-            st.session_state['locked'] = True
-            st.warning("⚠️ Base Build Methodology locked. Clear lengths to unlock.")
+        if st.session_state['locked'] and len(st.session_state['lengths_list']) == 0:
+            if st.button("🔓 Unlock Base Build Methodology"):
+                st.session_state['locked'] = False
+        elif not st.session_state['locked']:
+            if st.button("🔒 Lock Base Build Methodology"):
+                st.session_state['locked'] = True
 
     # === SELECT LENGTHS ===
     st.markdown("## Select Lengths")
@@ -109,50 +114,59 @@ if uploaded_file:
         st.session_state['efficiency_reason'] = efficiency_reason
 
     # === BASE LUMENS/WATTS FROM IES ===
-    base_lm_per_m = 400.0
-    base_w_per_m = 11.6
+    base_lm_per_m = 400.0  # Static placeholder for now
+    base_w_per_m = 11.6    # Static placeholder for now
     efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
     new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
     new_lm_per_m = round(base_lm_per_m, 1)
 
-    # === SELECTED LENGTHS FOR IES GENERATION ===
+    # === SETTINGS PREVIEW ===
+    luminaire_name_base = luminaire_info.split()[0] if luminaire_info != "Not Found" else "Luminaire"
+    for length in st.session_state['lengths_list']:
+        tier = "Core"
+        if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
+            tier = "Bespoke"
+        elif led_efficiency_gain_percent != 0:
+            tier = "Professional"
+        elif st.session_state['led_pitch'] % 4 != 0:
+            tier = "Advanced"
+
+    # === SELECTED LENGTHS TABLE ===
     st.markdown("## 📏 Selected Lengths for IES Generation")
 
     if st.session_state['lengths_list']:
-        product_tiers_found = set()
         table_rows = []
-
         for length in st.session_state['lengths_list']:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
             lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
 
-            # Tier rules
+            # Determine Tier for Filename
+            tier = "Core"
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
                 tier = "Professional"
             elif st.session_state['led_pitch'] % 4 != 0:
                 tier = "Advanced"
-            else:
-                tier = "Core"
 
-            product_tiers_found.add(tier)
+            # Luminaire & File Name
+            luminaire_file_name = f"{luminaire_name_base}_{length:.3f}m_{tier}".replace(' ', '_')
 
-            # Metadata extraction (dummy CRI & CCT)
+            # Extract CRI and CCT from luminaire_info (stub values)
             cri_value = "80"
             cct_value = "3000K"
 
-            luminaire_file_name = f"Bline8585D_{length:.3f}m_{tier}"
-
             row = {
-                "Delete": "🗑️",
+                "🗑️": "Delete",
                 "Length (m)": f"{length:.3f}",
                 "Luminaire & IES File Name": luminaire_file_name,
                 "CRI": cri_value,
                 "CCT": cct_value,
-                "Comments": efficiency_reason if led_efficiency_gain_percent != 0 else "",
-                "Settings lm/W": f"{lm_per_w:.1f}"
+                "Total Lumens": f"{total_lumens:.1f}",
+                "Total Watts": f"{total_watts:.1f}",
+                "Settings lm/W": f"{lm_per_w:.1f}",
+                "Comments": efficiency_reason if led_efficiency_gain_percent != 0 else ""
             }
 
             table_rows.append(row)
@@ -160,8 +174,9 @@ if uploaded_file:
         df = pd.DataFrame(table_rows)
 
         gb = GridOptionsBuilder.from_dataframe(df)
-        gb.configure_selection('single', use_checkbox=True)
         gb.configure_grid_options(domLayout='normal')
+        gb.configure_columns(['🗑️'], editable=False, width=70)
+        gb.configure_selection('single', use_checkbox=False)
 
         grid_response = AgGrid(
             df,
@@ -171,24 +186,12 @@ if uploaded_file:
             allow_unsafe_jscode=True
         )
 
-        selected_rows = grid_response.get('selected_rows', [])
-
-        if selected_rows:
-            selected_row = selected_rows[0]
-            length_value_str = selected_row.get('Length (m)', None)
-
-            if length_value_str:
-                length_value = float(length_value_str.strip())
-
-                if st.button("🗑️ Delete Selected Length"):
-                    st.session_state['lengths_list'] = [
-                        l for l in st.session_state['lengths_list']
-                        if round(l, 3) != round(length_value, 3)
-                    ]
-                    st.experimental_rerun()
-
-        if len(product_tiers_found) > 1:
-            st.markdown("> ⚠️ Where multiple tiers are displayed, the highest tier applies.")
+        selected_row = grid_response.get('selected_rows')
+        if selected_row:
+            row_index = df[df["Length (m)"] == selected_row[0]["Length (m)"]].index[0]
+            if st.button("🗑️ Delete Selected Row"):
+                st.session_state['lengths_list'].pop(row_index)
+                st.experimental_rerun()
 
         st.download_button(
             "Download CSV Summary",
@@ -196,6 +199,7 @@ if uploaded_file:
             file_name="Selected_Lengths_Summary.csv",
             mime="text/csv"
         )
+
     else:
         st.info("No lengths selected yet. Click a button above to add lengths.")
 
@@ -207,7 +211,7 @@ if uploaded_file:
         for length in st.session_state['lengths_list']:
             scaled_data = modify_candela_data(parsed['data'], 1.0)
             new_file = create_ies_file(parsed['header'], scaled_data)
-            filename = f"Optimised_{length:.3f}m.ies"
+            filename = f"{luminaire_name_base}_{length:.3f}m_{tier}.ies".replace(' ', '_')
             files_to_zip[filename] = new_file
 
         zip_buffer = create_zip(files_to_zip)
