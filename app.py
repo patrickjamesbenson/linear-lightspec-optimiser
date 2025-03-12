@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 # === STREAMLIT PAGE CONFIG ===
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
@@ -14,14 +13,20 @@ if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
 
-    # === INIT SESSION STATE ===
-    if 'locked' not in st.session_state:
-        st.session_state['locked'] = True
-        st.session_state['lengths_list'] = []
-        st.session_state['end_plate_thickness'] = 5.5
-        st.session_state['led_pitch'] = 56.0
-        st.session_state['led_efficiency_gain_percent'] = 0.0
-        st.session_state['efficiency_reason'] = 'Current Generation'
+    # === Extract Luminaire Name from Metadata ===
+    luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
+    luminaire_name_base = luminaire_info.replace("[LUMINAIRE]", "").strip()
+
+    # === Extract CRI and CCT ===
+    # Example: "BLine 8585D 11.6W - 80CRI - 3000K"
+    cri_value = "N/A"
+    cct_value = "N/A"
+
+    if luminaire_name_base != "Not Found":
+        parts = luminaire_name_base.split('-')
+        if len(parts) >= 3:
+            cri_value = parts[-2].strip()  # Assuming "80CRI"
+            cct_value = parts[-1].strip()  # Assuming "3000K"
 
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
@@ -29,7 +34,6 @@ if uploaded_file:
         test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
         manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found")
         lumcat_info = next((line for line in parsed['header'] if line.startswith("[LUMCAT]")), "[LUMCAT] Not Found")
-        luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
         issuedate_info = next((line for line in parsed['header'] if line.startswith("[ISSUEDATE]")), "[ISSUEDATE] Not Found")
 
         metadata_dict = {
@@ -64,11 +68,22 @@ if uploaded_file:
 
     # === BASE BUILD METHODOLOGY ===
     with st.expander("📂 Base Build Methodology", expanded=False):
-
-        # Check for lock state based on selected lengths
-        if len(st.session_state['lengths_list']) > 0:
+        if 'locked' not in st.session_state:
             st.session_state['locked'] = True
-            st.info("🔒 Base Build Methodology locked because lengths have been selected. Clear all lengths to unlock.")
+            st.session_state['lengths_list'] = []
+            st.session_state['end_plate_thickness'] = 5.5
+            st.session_state['led_pitch'] = 56.0
+
+        # Disable edits if lengths exist
+        if st.session_state['lengths_list']:
+            st.info("🔒 Base Build locked because lengths have been selected.")
+        else:
+            if st.session_state['locked']:
+                if st.button("🔓 Unlock Base Build Methodology"):
+                    st.session_state['locked'] = False
+            else:
+                if st.button("🔒 Lock Base Build Methodology"):
+                    st.session_state['locked'] = True
 
         if st.session_state['locked']:
             st.info(f"🔒 Locked: End Plate Expansion Gutter = {st.session_state['end_plate_thickness']} mm | LED Series Module Pitch = {st.session_state['led_pitch']} mm")
@@ -76,13 +91,6 @@ if uploaded_file:
             st.warning("⚠️ Adjust these only if you understand the impact on manufacturability.")
             st.session_state['end_plate_thickness'] = st.number_input("End Plate Expansion Gutter (mm)", min_value=0.0, value=5.5, step=0.1)
             st.session_state['led_pitch'] = st.number_input("LED Series Module Pitch (mm)", min_value=14.0, value=56.0, step=0.1)
-
-        if st.session_state['locked'] and len(st.session_state['lengths_list']) == 0:
-            if st.button("🔓 Unlock Base Build Methodology"):
-                st.session_state['locked'] = False
-        elif not st.session_state['locked']:
-            if st.button("🔒 Lock Base Build Methodology"):
-                st.session_state['locked'] = True
 
     # === SELECT LENGTHS ===
     st.markdown("## Select Lengths")
@@ -114,51 +122,38 @@ if uploaded_file:
         st.session_state['efficiency_reason'] = efficiency_reason
 
     # === BASE LUMENS/WATTS FROM IES ===
-    base_lm_per_m = 400.0  # Static placeholder for now
-    base_w_per_m = 11.6    # Static placeholder for now
+    base_lm_per_m = 400.0
+    base_w_per_m = 11.6
     efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
     new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
     new_lm_per_m = round(base_lm_per_m, 1)
 
-    # === SETTINGS PREVIEW ===
-    luminaire_name_base = luminaire_info.split()[0] if luminaire_info != "Not Found" else "Luminaire"
-    for length in st.session_state['lengths_list']:
-        tier = "Core"
-        if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
-            tier = "Bespoke"
-        elif led_efficiency_gain_percent != 0:
-            tier = "Professional"
-        elif st.session_state['led_pitch'] % 4 != 0:
-            tier = "Advanced"
-
-    # === SELECTED LENGTHS TABLE ===
+    # === SELECTED LENGTHS FOR IES GENERATION ===
     st.markdown("## 📏 Selected Lengths for IES Generation")
 
     if st.session_state['lengths_list']:
         table_rows = []
+
         for length in st.session_state['lengths_list']:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
             lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
 
-            # Determine Tier for Filename
-            tier = "Core"
+            # Product Tier Logic
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
                 tier = "Professional"
             elif st.session_state['led_pitch'] % 4 != 0:
                 tier = "Advanced"
+            else:
+                tier = "Core"
 
-            # Luminaire & File Name
-            luminaire_file_name = f"{luminaire_name_base}_{length:.3f}m_{tier}".replace(' ', '_')
-
-            # Extract CRI and CCT from luminaire_info (stub values)
-            cri_value = "80"
-            cct_value = "3000K"
+            # Luminaire & IES File Name
+            luminaire_file_name = f"{luminaire_name_base}_{length:.3f}m_{tier}"
 
             row = {
-                "🗑️": "Delete",
+                "Delete": "🗑️",
                 "Length (m)": f"{length:.3f}",
                 "Luminaire & IES File Name": luminaire_file_name,
                 "CRI": cri_value,
@@ -173,25 +168,22 @@ if uploaded_file:
 
         df = pd.DataFrame(table_rows)
 
-        gb = GridOptionsBuilder.from_dataframe(df)
-        gb.configure_grid_options(domLayout='normal')
-        gb.configure_columns(['🗑️'], editable=False, width=70)
-        gb.configure_selection('single', use_checkbox=False)
+        for i, row in df.iterrows():
+            cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
+            delete_button = cols[0].button("🗑️", key=f"delete_{i}")
 
-        grid_response = AgGrid(
-            df,
-            gridOptions=gb.build(),
-            update_mode=GridUpdateMode.SELECTION_CHANGED,
-            height=(len(df) * 35 + 50),
-            allow_unsafe_jscode=True
-        )
-
-        selected_row = grid_response.get('selected_rows')
-        if selected_row:
-            row_index = df[df["Length (m)"] == selected_row[0]["Length (m)"]].index[0]
-            if st.button("🗑️ Delete Selected Row"):
-                st.session_state['lengths_list'].pop(row_index)
+            if delete_button:
+                st.session_state['lengths_list'].pop(i)
                 st.experimental_rerun()
+
+            cols[1].write(row["Length (m)"])
+            cols[2].write(row["Luminaire & IES File Name"])
+            cols[3].write(row["CRI"])
+            cols[4].write(row["CCT"])
+            cols[5].write(row["Total Lumens"])
+            cols[6].write(row["Total Watts"])
+            cols[7].write(row["Settings lm/W"])
+            cols[8].write(row["Comments"])
 
         st.download_button(
             "Download CSV Summary",
@@ -208,10 +200,11 @@ if uploaded_file:
 
     if st.session_state['lengths_list']:
         files_to_zip = {}
+
         for length in st.session_state['lengths_list']:
             scaled_data = modify_candela_data(parsed['data'], 1.0)
             new_file = create_ies_file(parsed['header'], scaled_data)
-            filename = f"{luminaire_name_base}_{length:.3f}m_{tier}.ies".replace(' ', '_')
+            filename = f"Optimised_{length:.3f}m.ies"
             files_to_zip[filename] = new_file
 
         zip_buffer = create_zip(files_to_zip)
