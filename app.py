@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
 
-# === STREAMLIT PAGE CONFIG ===
+# === PAGE CONFIG ===
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
 
@@ -13,25 +13,13 @@ if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
 
-    # === Extract Luminaire Info ===
-    luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
-    luminaire_name_base = luminaire_info.replace("[LUMINAIRE]", "").strip()
-
-    # === Extract CRI and CCT from luminaire name ===
-    cri_value = "N/A"
-    cct_value = "N/A"
-    if luminaire_name_base != "Not Found":
-        parts = luminaire_name_base.split('-')
-        if len(parts) >= 3:
-            cri_value = parts[-2].strip()
-            cct_value = parts[-1].strip()
-
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
         ies_version = next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found")
         test_info = next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found")
         manufac_info = next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found")
         lumcat_info = next((line for line in parsed['header'] if line.startswith("[LUMCAT]")), "[LUMCAT] Not Found")
+        luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
         issuedate_info = next((line for line in parsed['header'] if line.startswith("[ISSUEDATE]")), "[ISSUEDATE] Not Found")
 
         metadata_dict = {
@@ -56,6 +44,7 @@ if uploaded_file:
                 "Units Type", "Width (m)", "Length (m)", "Height (m)",
                 "Ballast Factor", "Future Use", "Input Watts"
             ]
+
             param_data = {label: value for label, value in zip(param_labels, photometric_params[:13])}
 
             st.markdown("### Photometric Parameters")
@@ -71,7 +60,6 @@ if uploaded_file:
             st.session_state['end_plate_thickness'] = 5.5
             st.session_state['led_pitch'] = 56.0
 
-        # Disable edits if lengths exist
         if st.session_state['lengths_list']:
             st.info("🔒 Base Build locked because lengths have been selected.")
         else:
@@ -124,24 +112,29 @@ if uploaded_file:
     efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
     new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
     new_lm_per_m = round(base_lm_per_m, 1)
+    new_lm_per_w = round(new_lm_per_m / new_w_per_m, 1) if new_w_per_m != 0 else 0.0
 
     # === SELECTED LENGTHS TABLE ===
     st.markdown("## 📏 Selected Lengths for IES Generation")
 
-    delete_index = None
-
     if st.session_state['lengths_list']:
-        header_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 2])
-        headers = ["", "Length (m)", "Luminaire & IES File Name", "CRI", "CCT", "Total Lumens", "Total Watts", "Settings lm/W", "Comments"]
+        product_tiers_found = set()
+
+        # Headers
+        header_cols = st.columns([1, 2, 2, 2, 2, 2, 2, 2])
+        headers = ["", "Length (m)", "Luminaire & IES File Name", "CRI", "CCT", "Total Lumens", "Total Watts", "Settings lm/W"]
         for col, h in zip(header_cols, headers):
             col.markdown(f"**{h}**")
 
+        delete_index = None  # Track which index to delete
+
+        # Rows
         for idx, length in enumerate(st.session_state['lengths_list']):
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
             lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
 
-            # Product Tier Logic
+            # Tier logic
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
@@ -151,43 +144,40 @@ if uploaded_file:
             else:
                 tier = "Core"
 
-            luminaire_file_name = f"{luminaire_name_base}_{length:.3f}m_{tier}"
-            comments = efficiency_reason if led_efficiency_gain_percent != 0 else ""
+            luminaire_file_name = f"[LUMINAIRE]_{length:.3f}m_{tier}"
 
-            row_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 2])
+            row_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2])
 
             if row_cols[0].button("🗑️", key=f"del_{idx}"):
                 delete_index = idx
 
             row_cols[1].write(f"{length:.3f}")
             row_cols[2].write(luminaire_file_name)
-            row_cols[3].write(cri_value)
-            row_cols[4].write(cct_value)
+            row_cols[3].write("80")  # Placeholder for CRI
+            row_cols[4].write("3000K")  # Placeholder for CCT
             row_cols[5].write(f"{total_lumens:.1f}")
             row_cols[6].write(f"{total_watts:.1f}")
             row_cols[7].write(f"{lm_per_w:.1f}")
-            row_cols[8].write(comments)
 
         if delete_index is not None:
             st.session_state['lengths_list'].pop(delete_index)
-            st.experimental_rerun()
+            st.rerun()
 
-        # CSV download
+        # CSV Download
         df = pd.DataFrame([{
             "Length (m)": f"{length:.3f}",
-            "Luminaire & IES File Name": f"{luminaire_name_base}_{length:.3f}m_{tier}",
-            "CRI": cri_value,
-            "CCT": cct_value,
+            "Luminaire & IES File Name": f"[LUMINAIRE]_{length:.3f}m_{tier}",
+            "CRI": "80",
+            "CCT": "3000K",
             "Total Lumens": f"{round(new_lm_per_m * length, 1)}",
             "Total Watts": f"{round(new_w_per_m * length, 1)}",
-            "Settings lm/W": f"{lm_per_w:.1f}",
-            "Comments": comments
+            "Settings lm/W": f"{new_lm_per_w:.1f}"
         } for length in st.session_state['lengths_list']])
 
         st.download_button("Download CSV Summary", data=df.to_csv(index=False).encode('utf-8'), file_name="Selected_Lengths_Summary.csv", mime="text/csv")
 
     else:
-        st.info("No lengths selected yet. Click a button above to add lengths.")
+        st.info("No lengths selected yet. Click above to add lengths.")
 
     # === GENERATE IES FILES ===
     st.markdown("## Generate Optimised IES Files")
