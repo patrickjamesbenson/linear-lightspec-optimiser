@@ -7,6 +7,9 @@ from datetime import datetime
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
 
+# === FILE UPLOAD ===
+uploaded_file = st.file_uploader("Upload your Base IES file", type=["ies"])
+
 # === INITIALISE SESSION STATE ===
 if 'locked' not in st.session_state:
     st.session_state['locked'] = True
@@ -17,9 +20,6 @@ if 'locked' not in st.session_state:
     st.session_state['efficiency_reason'] = 'Current Generation'
     st.session_state['export_id'] = datetime.now().strftime("%Y%m%d%H%M%S")
 
-# === FILE UPLOAD ===
-uploaded_file = st.file_uploader("Upload your Base IES file", type=["ies"])
-
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
@@ -28,17 +28,16 @@ if uploaded_file:
     luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
     luminaire_name_base = luminaire_info.replace("[LUMINAIRE]", "").strip()
 
-    # === EXTRACT CRI & CCT ===
-    cri_value = "N/A"
-    cct_value = "N/A"
-    optic_type = "N/A"
+    # === PARSE CLEAN LUMINAIRE & OPTIC FOR FILE NAME ===
+    # Expected format: BLine 5690D 13.6W - Diffused down - 90CRI - 4000K
+    parsed_parts = luminaire_name_base.split(' - ')
+    luminaire_model = parsed_parts[0].split(' ')[0] + ' ' + parsed_parts[0].split(' ')[1]  # BLine 5690D
+    optic = parsed_parts[1] if len(parsed_parts) > 1 else "Unknown Optic"
+    clean_luminaire_name = f"{luminaire_model} {optic}"
 
-    if luminaire_name_base != "Not Found":
-        parts = luminaire_name_base.split('-')
-        if len(parts) >= 4:
-            cri_value = parts[-2].strip()  # 90CRI
-            cct_value = parts[-1].strip()  # 4000K
-            optic_type = parts[-3].strip()  # Diffused Down
+    # === EXTRACT CRI & CCT ===
+    cri_value = parsed_parts[2] if len(parsed_parts) > 2 else "N/A"  # e.g., 90CRI
+    cct_value = parsed_parts[3] if len(parsed_parts) > 3 else "N/A"  # e.g., 4000K
 
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
@@ -79,40 +78,22 @@ if uploaded_file:
 
     # === BASE BUILD METHODOLOGY ===
     with st.expander("📂 Base Build Methodology", expanded=False):
-        # Auto-lock if lengths_list has items
         if st.session_state['lengths_list']:
-            st.session_state['locked'] = True  # Ensure locked state stays synced
+            st.info("🔒 Base Build locked because lengths have been selected.")
         else:
-            st.session_state['locked'] = st.session_state.get('locked', False)
-
-        if st.session_state['locked']:
-            st.info(f"🔒 Base Build locked. End Plate: {st.session_state['end_plate_thickness']} mm | LED Pitch: {st.session_state['led_pitch']} mm")
-        else:
-            st.warning("⚠️ Adjust these only if you understand the impact on manufacturability.")
-            # Editable ONLY if not locked
-            st.session_state['end_plate_thickness'] = st.number_input(
-                "End Plate Expansion Gutter (mm)",
-                min_value=0.0,
-                value=st.session_state['end_plate_thickness'],
-                step=0.1,
-                disabled=st.session_state['locked']
-            )
-            st.session_state['led_pitch'] = st.number_input(
-                "LED Series Module Pitch (mm)",
-                min_value=14.0,
-                value=st.session_state['led_pitch'],
-                step=0.1,
-                disabled=st.session_state['locked']
-            )
-
-        # Lock / Unlock buttons only when NO lengths exist
-        if not st.session_state['lengths_list']:
             if st.session_state['locked']:
                 if st.button("🔓 Unlock Base Build Methodology"):
                     st.session_state['locked'] = False
             else:
                 if st.button("🔒 Lock Base Build Methodology"):
                     st.session_state['locked'] = True
+
+        if st.session_state['locked']:
+            st.info(f"🔒 Locked: End Plate: {st.session_state['end_plate_thickness']} mm | LED Pitch: {st.session_state['led_pitch']} mm")
+        else:
+            st.warning("⚠️ Adjust these only if you understand the impact on manufacturability.")
+            st.session_state['end_plate_thickness'] = st.number_input("End Plate Expansion Gutter (mm)", min_value=0.0, value=5.5, step=0.1)
+            st.session_state['led_pitch'] = st.number_input("LED Series Module Pitch (mm)", min_value=14.0, value=56.0, step=0.1)
 
     # === SELECT LENGTHS ===
     st.markdown("## Select Lengths")
@@ -132,18 +113,12 @@ if uploaded_file:
 
     # === LED CHIPSET ADJUSTMENT ===
     with st.expander("💡 LED Chipset Adjustment", expanded=False):
-        led_efficiency_gain_percent = st.number_input(
-            "LED Chipset Adjustment (%)",
-            min_value=-50.0,
-            max_value=100.0,
-            value=st.session_state.get('led_efficiency_gain_percent', 0.0),
-            step=1.0
-        )
+        led_efficiency_gain_percent = st.number_input("LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0,
+                                                      value=st.session_state.get('led_efficiency_gain_percent', 0.0),
+                                                      step=1.0)
 
-        efficiency_reason = st.text_input(
-            "Reason (e.g., Gen 2 LED +15% increase lumen output)",
-            value=st.session_state.get('efficiency_reason', 'Current Generation')
-        )
+        efficiency_reason = st.text_input("Reason (e.g., Gen 2 LED +15% increase lumen output)",
+                                          value=st.session_state.get('efficiency_reason', 'Current Generation'))
 
         if led_efficiency_gain_percent != 0 and (efficiency_reason.strip() == "" or efficiency_reason == "Current Generation"):
             st.error("⚠️ You must provide a reason for the LED Chipset Adjustment before proceeding.")
@@ -170,7 +145,6 @@ if uploaded_file:
             total_watts = round(new_w_per_m * length, 1)
             lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
 
-            # Tier logic
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif led_efficiency_gain_percent != 0:
@@ -180,7 +154,7 @@ if uploaded_file:
             else:
                 tier = "Core"
 
-            luminaire_file_name = f"{luminaire_name_base.split('-')[0].strip()} {optic_type}_{length:.3f}m_{tier}"
+            luminaire_file_name = f"{clean_luminaire_name}_{length:.3f}m_{tier}"
 
             row = {
                 "Delete": "🗑️",
@@ -196,7 +170,7 @@ if uploaded_file:
 
             table_rows.append(row)
 
-        # Display Table Headers
+        # Display Headers
         header_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
         headers = ["", "Length (m)", "Luminaire & IES File Name", "CRI", "CCT", "Total Lumens", "Total Watts", "Settings lm/W", "Comments"]
         for col, h in zip(header_cols, headers):
@@ -216,7 +190,6 @@ if uploaded_file:
             for col, val in zip(row_cols[1:], row_data):
                 col.write(val)
 
-        # Export CSV (excluding Delete column)
         export_df = pd.DataFrame([{
             "Length (m)": r["Length (m)"],
             "Luminaire & IES File Name": r["Luminaire & IES File Name"],
@@ -241,7 +214,6 @@ if uploaded_file:
         for length in st.session_state['lengths_list']:
             scaled_data = modify_candela_data(parsed['data'], 1.0)
 
-            # Add export ID to [TEST]
             updated_header = []
             for line in parsed['header']:
                 if line.startswith("[TEST]"):
@@ -250,7 +222,7 @@ if uploaded_file:
                     updated_header.append(line)
 
             new_file = create_ies_file(updated_header, scaled_data)
-            filename = f"{luminaire_name_base.split('-')[0].strip()} {optic_type}_{length:.3f}m.ies"
+            filename = f"{clean_luminaire_name}_{length:.3f}m.ies"
             files_to_zip[filename] = new_file
 
         zip_buffer = create_zip(files_to_zip)
