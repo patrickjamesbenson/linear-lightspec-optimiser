@@ -18,15 +18,14 @@ if uploaded_file:
     luminaire_name_base = luminaire_info.replace("[LUMINAIRE]", "").strip()
 
     # === Extract CRI and CCT ===
-    # Example: "BLine 8585D 11.6W - 80CRI - 3000K"
     cri_value = "N/A"
     cct_value = "N/A"
 
     if luminaire_name_base != "Not Found":
         parts = luminaire_name_base.split('-')
         if len(parts) >= 3:
-            cri_value = parts[-2].strip()  # Assuming "80CRI"
-            cct_value = parts[-1].strip()  # Assuming "3000K"
+            cri_value = parts[-2].strip()
+            cct_value = parts[-1].strip()
 
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
@@ -74,7 +73,6 @@ if uploaded_file:
             st.session_state['end_plate_thickness'] = 5.5
             st.session_state['led_pitch'] = 56.0
 
-        # Disable edits if lengths exist
         if st.session_state['lengths_list']:
             st.info("🔒 Base Build locked because lengths have been selected.")
         else:
@@ -132,21 +130,9 @@ if uploaded_file:
     st.markdown("## 📏 Selected Lengths for IES Generation")
 
     if st.session_state['lengths_list']:
+        table_rows = []
 
-        # --- HEADER ROW ---
-        header_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
-        header_cols[0].markdown("**Delete**")
-        header_cols[1].markdown("**Length (m)**")
-        header_cols[2].markdown("**Luminaire & IES File Name**")
-        header_cols[3].markdown("**CRI**")
-        header_cols[4].markdown("**CCT**")
-        header_cols[5].markdown("**Total Lumens**")
-        header_cols[6].markdown("**Total Watts**")
-        header_cols[7].markdown("**Settings lm/W**")
-        header_cols[8].markdown("**Comments**")
-
-        # --- DATA ROWS ---
-        for i, length in enumerate(st.session_state['lengths_list']):
+        for idx, length in enumerate(st.session_state['lengths_list']):
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
             lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
@@ -162,41 +148,8 @@ if uploaded_file:
 
             luminaire_file_name = f"{luminaire_name_base}_{length:.3f}m_{tier}"
 
-            row_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
-            delete_button = row_cols[0].button("🗑️", key=f"delete_{i}")
-
-            if delete_button:
-                st.session_state['lengths_list'].pop(i)
-                st.experimental_rerun()
-
-            row_cols[1].write(f"{length:.3f}")
-            row_cols[2].write(luminaire_file_name)
-            row_cols[3].write(cri_value)
-            row_cols[4].write(cct_value)
-            row_cols[5].write(f"{total_lumens:.1f}")
-            row_cols[6].write(f"{total_watts:.1f}")
-            row_cols[7].write(f"{lm_per_w:.1f}")
-            row_cols[8].write(efficiency_reason if led_efficiency_gain_percent != 0 else "")
-
-        # CSV Export
-        csv_rows = []
-        for length in st.session_state['lengths_list']:
-            total_lumens = round(new_lm_per_m * length, 1)
-            total_watts = round(new_w_per_m * length, 1)
-            lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
-
-            if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
-                tier = "Bespoke"
-            elif led_efficiency_gain_percent != 0:
-                tier = "Professional"
-            elif st.session_state['led_pitch'] % 4 != 0:
-                tier = "Advanced"
-            else:
-                tier = "Core"
-
-            luminaire_file_name = f"{luminaire_name_base}_{length:.3f}m_{tier}"
-
-            csv_rows.append({
+            table_rows.append({
+                "Index": idx,
                 "Length (m)": f"{length:.3f}",
                 "Luminaire & IES File Name": luminaire_file_name,
                 "CRI": cri_value,
@@ -207,15 +160,32 @@ if uploaded_file:
                 "Comments": efficiency_reason if led_efficiency_gain_percent != 0 else ""
             })
 
-        df_csv = pd.DataFrame(csv_rows)
+        df = pd.DataFrame(table_rows)
+
+        st.markdown("### Lengths Table")
+        for row in table_rows:
+            cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
+
+            delete_btn = cols[0].button("🗑️", key=f"delete_{row['Index']}")
+            if delete_btn:
+                st.session_state['lengths_list'].pop(row['Index'])
+                st.experimental_rerun()
+
+            cols[1].write(row["Length (m)"])
+            cols[2].write(row["Luminaire & IES File Name"])
+            cols[3].write(row["CRI"])
+            cols[4].write(row["CCT"])
+            cols[5].write(row["Total Lumens"])
+            cols[6].write(row["Total Watts"])
+            cols[7].write(row["Settings lm/W"])
+            cols[8].write(row["Comments"])
 
         st.download_button(
             "Download CSV Summary",
-            data=df_csv.to_csv(index=False).encode('utf-8'),
+            data=df.drop(columns=['Index']).to_csv(index=False).encode('utf-8'),
             file_name="Selected_Lengths_Summary.csv",
             mime="text/csv"
         )
-
     else:
         st.info("No lengths selected yet. Click a button above to add lengths.")
 
