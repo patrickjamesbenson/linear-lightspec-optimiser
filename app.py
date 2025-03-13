@@ -29,7 +29,7 @@ if uploaded_file:
     luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
     luminaire_name_base = luminaire_info.replace("[LUMINAIRE]", "").strip()
 
-    # === EXTRACT CRI & CCT ===
+    # === EXTRACT CRI, CCT, OPTIC ===
     cri_value = "N/A"
     cct_value = "N/A"
     optic_description = "Unknown Optic"
@@ -37,10 +37,9 @@ if uploaded_file:
     if luminaire_name_base != "Not Found":
         parts = luminaire_name_base.split('-')
         if len(parts) >= 4:
-            # Example structure: BLine 8585D 11.6W - Diffused down - 80CRI - 3000K
-            optic_description = parts[1].strip() if len(parts) > 1 else "Unknown Optic"
-            cri_value = parts[-2].strip()  # 80CRI
-            cct_value = parts[-1].strip()  # 3000K
+            optic_description = parts[1].strip()
+            cri_value = parts[-2].strip()
+            cct_value = parts[-1].strip()
 
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
@@ -80,6 +79,7 @@ if uploaded_file:
     # === BASE BUILD METHODOLOGY ===
     with st.expander("📂 Base Build Methodology", expanded=False):
         if st.session_state['lengths_list']:
+            st.session_state['locked'] = True  # Lock it if lengths exist
             st.info(f"🔒 Locked: End Plate Expansion Gutter = {st.session_state['end_plate_thickness']} mm | LED Series Module Pitch = {st.session_state['led_pitch']} mm")
         else:
             col1, col2 = st.columns(2)
@@ -97,9 +97,11 @@ if uploaded_file:
 
     if st.button(f"Add Shorter Buildable Length: {shorter_length_m:.3f} m"):
         st.session_state['lengths_list'].append(shorter_length_m)
+        st.session_state['locked'] = True  # Auto lock after add
 
     if st.button(f"Add Longer Buildable Length: {longer_length_m:.3f} m"):
         st.session_state['lengths_list'].append(longer_length_m)
+        st.session_state['locked'] = True  # Auto lock after add
 
     # === LED CHIPSET ADJUSTMENT ===
     with st.expander("💡 LED Chipset Adjustment", expanded=False):
@@ -115,17 +117,21 @@ if uploaded_file:
 
     # === SYSTEM LM/W INCREMENT ===
     with st.expander("🔒 Average lm/W Step Increment", expanded=False):
-        st.info(f"{st.session_state['lmw_step_increment']} lm/W is the average lumens per watt deviation across ECG driver power change increments in our current range.\n\nThis field is editable and should only be adjusted by advanced users who understand the impact on system calibration and design targets.")
-        # Currently locked value
+        st.info(f"""
+        To provide a quick reference, each mA power increment adjustment typically corresponds to an average efficacy of {st.session_state['lmw_step_increment']} lm/W.  
+        For advanced users only.
+        """)
         st.warning(f"🔒 Locked at: {st.session_state['lmw_step_increment']:.1f} lm/W")
 
     # === SELECTED LENGTHS TABLE ===
     st.markdown("## 📏 Selected Lengths for IES Generation")
 
     if st.session_state['lengths_list']:
-        table_rows = []
+        # These should be global across session to avoid errors in optimisation!
         base_lm_per_m = 400.0
         base_w_per_m = 11.6
+
+        table_rows = []
         efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
         new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
         new_lm_per_m = round(base_lm_per_m, 1)
@@ -151,11 +157,12 @@ if uploaded_file:
                 "Comments": efficiency_reason if led_efficiency_gain_percent != 0 else ""
             })
 
-        # Render table
         for row in table_rows:
             cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
             if cols[0].button("🗑️", key=f"delete_{row['idx']}"):
                 st.session_state['lengths_list'].pop(row['idx'])
+                if not st.session_state['lengths_list']:
+                    st.session_state['locked'] = False  # Unlock when list is empty
                 st.rerun()
 
             cols[1].write(row["Length (m)"])
@@ -167,31 +174,31 @@ if uploaded_file:
             cols[7].write(row["Settings lm/W"])
             cols[8].write(row["Comments"])
 
-        # CSV export
         export_df = pd.DataFrame(table_rows)
         st.download_button("Download CSV Summary", data=export_df.to_csv(index=False).encode('utf-8'), file_name="Selected_Lengths_Summary.csv", mime="text/csv")
 
     else:
-        st.info("No lengths selected yet. Click a button above to add lengths.")
+        st.info("No lengths selected yet.")
 
     # === DESIGN OPTIMISATION SECTION ===
     st.markdown("## 🎯 Design Optimisation")
-    target_lux = st.number_input("Target Lux Level", min_value=100, max_value=10000, value=400, step=50)
-    achieved_lux = st.number_input("Achieved Lux Level", min_value=100, max_value=10000, value=700, step=50)
-    difference_percent = round((achieved_lux - target_lux) / target_lux * 100, 1)
-    st.write(f"Difference: {difference_percent}%")
 
-    required_change_lm_per_m = round(base_lm_per_m * abs(difference_percent) / 100, 1)
-    increments_needed = int(required_change_lm_per_m // st.session_state['lmw_step_increment']) + 1
+    if st.session_state['lengths_list']:
+        target_lux = st.number_input("Target Lux Level", min_value=100, max_value=10000, value=400, step=50)
+        achieved_lux = st.number_input("Achieved Lux Level", min_value=100, max_value=10000, value=700, step=50)
 
-    if difference_percent > 0:
-        st.warning(f"⚠️ Consider reducing by {increments_needed} increments or dimming to match target lux.")
-    elif difference_percent < 0:
-        st.success(f"✅ Consider increasing by {increments_needed} increments or uploading a higher-output IES file.")
-    else:
-        st.info("🎯 Target Lux achieved! No adjustment needed.")
+        difference_percent = round((achieved_lux - target_lux) / target_lux * 100, 1)
+        required_change_lm_per_m = round(base_lm_per_m * abs(difference_percent) / 100, 1)
+        increments_needed = int(required_change_lm_per_m // st.session_state['lmw_step_increment']) + 1
 
-    st.markdown("Note: This enables theoretical model accuracy for future optimisations.")
+        if difference_percent > 0:
+            st.warning(f"⚠️ Consider reducing by {increments_needed} increments or dimming to match target lux.")
+        elif difference_percent < 0:
+            st.success(f"✅ Consider increasing by {increments_needed} increments or uploading a higher-output IES file.")
+        else:
+            st.info("🎯 Target Lux achieved! No adjustment needed.")
+
+        st.markdown("Note: This enables theoretical model accuracy for future optimisations.")
 
     # === GENERATE IES FILES ===
     st.markdown("## Generate Optimised IES Files")
