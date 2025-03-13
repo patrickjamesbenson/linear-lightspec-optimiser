@@ -9,37 +9,33 @@ st.title("Linear LightSpec Optimiser")
 
 # === INITIALISE SESSION STATE ===
 if 'locked' not in st.session_state:
-    st.session_state['locked'] = True
+    st.session_state['locked'] = False
     st.session_state['lengths_list'] = []
     st.session_state['end_plate_thickness'] = 5.5
     st.session_state['led_pitch'] = 56.0
     st.session_state['led_efficiency_gain_percent'] = 0.0
     st.session_state['efficiency_reason'] = 'Current Generation'
     st.session_state['export_id'] = datetime.now().strftime("%Y%m%d%H%M%S")
-    st.session_state['lmw_step_increment'] = 115.0
+    st.session_state['lm_per_watt_increment'] = 115  # Default increment for lm/W
 
-# === UPLOAD BASE IES FILE ===
+# === FILE UPLOAD ===
 uploaded_file = st.file_uploader("Upload your Base IES file", type=["ies"])
 
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
 
-    # === EXTRACT LUMINAIRE NAME ===
+    # === EXTRACT LUMINAIRE INFO ===
     luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
-    luminaire_name_base = luminaire_info.replace("[LUMINAIRE]", "").strip()
+    luminaire_desc = luminaire_info.replace("[LUMINAIRE]", "").strip()
 
-    # === EXTRACT CRI, CCT, OPTIC ===
-    cri_value = "N/A"
-    cct_value = "N/A"
-    optic_description = "Unknown Optic"
-
-    if luminaire_name_base != "Not Found":
-        parts = luminaire_name_base.split('-')
-        if len(parts) >= 4:
-            optic_description = parts[1].strip()
-            cri_value = parts[-2].strip()
-            cct_value = parts[-1].strip()
+    # Parse description
+    lum_parts = luminaire_desc.split('-')
+    lum_base_name = lum_parts[0].strip() if len(lum_parts) > 0 else "Unknown Base"
+    lum_watt = lum_parts[1].strip() if len(lum_parts) > 1 else "Unknown Watt"
+    lum_optic = lum_parts[2].strip() if len(lum_parts) > 2 else "Unknown Optic"
+    cri_value = lum_parts[-2].strip() if len(lum_parts) >= 3 else "N/A"
+    cct_value = lum_parts[-1].strip() if len(lum_parts) >= 3 else "N/A"
 
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
@@ -64,14 +60,14 @@ if uploaded_file:
         photometric_line = parsed['data'][0] if parsed['data'] else ""
         photometric_params = photometric_line.strip().split()
 
-        if len(photometric_params) >= 13:
-            param_labels = [
-                "Number of Lamps", "Lumens per Lamp", "Candela Multiplier",
-                "Vertical Angles", "Horizontal Angles", "Photometric Type",
-                "Units Type", "Width (m)", "Length (m)", "Height (m)",
-                "Ballast Factor", "Future Use", "Input Watts"
-            ]
+        param_labels = [
+            "Number of Lamps", "Lumens per Lamp", "Candela Multiplier",
+            "Vertical Angles", "Horizontal Angles", "Photometric Type",
+            "Units Type", "Width (m)", "Length (m)", "Height (m)",
+            "Ballast Factor", "Future Use", "Input Watts"
+        ]
 
+        if len(photometric_params) >= 13:
             param_data = {label: value for label, value in zip(param_labels, photometric_params[:13])}
             st.markdown("### Photometric Parameters")
             st.table(pd.DataFrame.from_dict(param_data, orient='index', columns=['Value']))
@@ -79,12 +75,10 @@ if uploaded_file:
     # === BASE BUILD METHODOLOGY ===
     with st.expander("📂 Base Build Methodology", expanded=False):
         if st.session_state['lengths_list']:
-            st.session_state['locked'] = True  # Lock it if lengths exist
             st.info(f"🔒 Locked: End Plate Expansion Gutter = {st.session_state['end_plate_thickness']} mm | LED Series Module Pitch = {st.session_state['led_pitch']} mm")
         else:
-            col1, col2 = st.columns(2)
-            st.session_state['end_plate_thickness'] = col1.number_input("End Plate Expansion Gutter (mm)", min_value=0.0, value=st.session_state['end_plate_thickness'], step=0.1)
-            st.session_state['led_pitch'] = col2.number_input("LED Series Module Pitch (mm)", min_value=14.0, value=st.session_state['led_pitch'], step=0.1)
+            st.session_state['end_plate_thickness'] = st.number_input("End Plate Expansion Gutter (mm)", min_value=0.0, value=5.5, step=0.1)
+            st.session_state['led_pitch'] = st.number_input("LED Series Module Pitch (mm)", min_value=14.0, value=56.0, step=0.1)
 
     # === SELECT LENGTHS ===
     st.markdown("## Select Lengths")
@@ -97,16 +91,21 @@ if uploaded_file:
 
     if st.button(f"Add Shorter Buildable Length: {shorter_length_m:.3f} m"):
         st.session_state['lengths_list'].append(shorter_length_m)
-        st.session_state['locked'] = True  # Auto lock after add
+        st.session_state['locked'] = True
+        st.experimental_rerun()
 
     if st.button(f"Add Longer Buildable Length: {longer_length_m:.3f} m"):
         st.session_state['lengths_list'].append(longer_length_m)
-        st.session_state['locked'] = True  # Auto lock after add
+        st.session_state['locked'] = True
+        st.experimental_rerun()
 
     # === LED CHIPSET ADJUSTMENT ===
     with st.expander("💡 LED Chipset Adjustment", expanded=False):
-        led_efficiency_gain_percent = st.number_input("LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0, value=st.session_state['led_efficiency_gain_percent'], step=1.0)
-        efficiency_reason = st.text_input("Reason (e.g., Gen 2 LED +15% increase lumen output)", value=st.session_state['efficiency_reason'])
+        led_efficiency_gain_percent = st.number_input("LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0,
+                                                      value=st.session_state.get('led_efficiency_gain_percent', 0.0),
+                                                      step=1.0)
+        efficiency_reason = st.text_input("Reason (e.g., Gen 2 LED +15% increase lumen output)",
+                                          value=st.session_state.get('efficiency_reason', 'Current Generation'))
 
         if led_efficiency_gain_percent != 0 and (efficiency_reason.strip() == "" or efficiency_reason == "Current Generation"):
             st.error("⚠️ You must provide a reason for the LED Chipset Adjustment before proceeding.")
@@ -115,38 +114,50 @@ if uploaded_file:
         st.session_state['led_efficiency_gain_percent'] = led_efficiency_gain_percent
         st.session_state['efficiency_reason'] = efficiency_reason
 
-    # === SYSTEM LM/W INCREMENT ===
+    # === SYSTEM LM/W EFFICIENCY INCREMENT ===
     with st.expander("🔒 Average lm/W Step Increment", expanded=False):
-        st.info(f"""
-        To provide a quick reference, each mA power increment adjustment typically corresponds to an average efficacy of {st.session_state['lmw_step_increment']} lm/W.  
-        For advanced users only.
+        st.markdown("""
+        **115 lm/W is the average lumens per watt deviation across ECG driver power change increments in our current range.**
+
+        This field is editable and should only be adjusted by advanced users who understand the impact on system calibration and design targets.
         """)
-        st.warning(f"🔒 Locked at: {st.session_state['lmw_step_increment']:.1f} lm/W")
+        if st.session_state['lengths_list']:
+            st.info(f"🔒 Locked at: {st.session_state['lm_per_watt_increment']} lm/W")
+        else:
+            st.session_state['lm_per_watt_increment'] = st.number_input("Average lm/W Step Increment", min_value=50, max_value=200,
+                                                                        value=st.session_state.get('lm_per_watt_increment', 115),
+                                                                        step=1)
+
+    # === BASE LUMENS/WATTS FROM IES ===
+    base_lm_per_m = 400.0
+    base_w_per_m = 11.6
+    efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
+    new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
+    new_lm_per_m = round(base_lm_per_m, 1)
 
     # === SELECTED LENGTHS TABLE ===
     st.markdown("## 📏 Selected Lengths for IES Generation")
 
     if st.session_state['lengths_list']:
-        # These should be global across session to avoid errors in optimisation!
-        base_lm_per_m = 400.0
-        base_w_per_m = 11.6
-
         table_rows = []
-        efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
-        new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
-        new_lm_per_m = round(base_lm_per_m, 1)
 
-        for idx, length in enumerate(st.session_state['lengths_list']):
+        for length in st.session_state['lengths_list']:
             total_lumens = round(new_lm_per_m * length, 1)
             total_watts = round(new_w_per_m * length, 1)
             lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
 
-            tier = "Bespoke" if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0 else "Professional" if led_efficiency_gain_percent != 0 else "Core"
+            if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
+                tier = "Bespoke"
+            elif led_efficiency_gain_percent != 0:
+                tier = "Professional"
+            elif st.session_state['led_pitch'] % 4 != 0:
+                tier = "Advanced"
+            else:
+                tier = "Core"
 
-            luminaire_file_name = f"{luminaire_name_base.split('-')[0].strip()} {optic_description}_{length:.3f}m_{tier}"
+            luminaire_file_name = f"{lum_base_name} {lum_watt} {lum_optic}_{length:.3f}m_{tier}"
 
-            table_rows.append({
-                "idx": idx,
+            row = {
                 "Length (m)": f"{length:.3f}",
                 "Luminaire & IES File Name": luminaire_file_name,
                 "CRI": cri_value,
@@ -155,15 +166,19 @@ if uploaded_file:
                 "Total Watts": f"{total_watts:.1f}",
                 "Settings lm/W": f"{lm_per_w:.1f}",
                 "Comments": efficiency_reason if led_efficiency_gain_percent != 0 else ""
-            })
+            }
 
-        for row in table_rows:
+            table_rows.append(row)
+
+        # DISPLAY TABLE
+        for idx, row in enumerate(table_rows):
             cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
-            if cols[0].button("🗑️", key=f"delete_{row['idx']}"):
-                st.session_state['lengths_list'].pop(row['idx'])
-                if not st.session_state['lengths_list']:
-                    st.session_state['locked'] = False  # Unlock when list is empty
-                st.rerun()
+
+            if cols[0].button("🗑️", key=f"delete_{idx}"):
+                st.session_state['lengths_list'].pop(idx)
+                if len(st.session_state['lengths_list']) == 0:
+                    st.session_state['locked'] = False
+                st.experimental_rerun()
 
             cols[1].write(row["Length (m)"])
             cols[2].write(row["Luminaire & IES File Name"])
@@ -174,54 +189,9 @@ if uploaded_file:
             cols[7].write(row["Settings lm/W"])
             cols[8].write(row["Comments"])
 
-        export_df = pd.DataFrame(table_rows)
-        st.download_button("Download CSV Summary", data=export_df.to_csv(index=False).encode('utf-8'), file_name="Selected_Lengths_Summary.csv", mime="text/csv")
-
     else:
-        st.info("No lengths selected yet.")
-
-    # === DESIGN OPTIMISATION SECTION ===
-    st.markdown("## 🎯 Design Optimisation")
-
-    if st.session_state['lengths_list']:
-        target_lux = st.number_input("Target Lux Level", min_value=100, max_value=10000, value=400, step=50)
-        achieved_lux = st.number_input("Achieved Lux Level", min_value=100, max_value=10000, value=700, step=50)
-
-        difference_percent = round((achieved_lux - target_lux) / target_lux * 100, 1)
-        required_change_lm_per_m = round(base_lm_per_m * abs(difference_percent) / 100, 1)
-        increments_needed = int(required_change_lm_per_m // st.session_state['lmw_step_increment']) + 1
-
-        if difference_percent > 0:
-            st.warning(f"⚠️ Consider reducing by {increments_needed} increments or dimming to match target lux.")
-        elif difference_percent < 0:
-            st.success(f"✅ Consider increasing by {increments_needed} increments or uploading a higher-output IES file.")
-        else:
-            st.info("🎯 Target Lux achieved! No adjustment needed.")
-
-        st.markdown("Note: This enables theoretical model accuracy for future optimisations.")
-
-    # === GENERATE IES FILES ===
-    st.markdown("## Generate Optimised IES Files")
-
-    if st.session_state['lengths_list']:
-        files_to_zip = {}
-        for length in st.session_state['lengths_list']:
-            scaled_data = modify_candela_data(parsed['data'], 1.0)
-
-            updated_header = []
-            for line in parsed['header']:
-                if line.startswith("[TEST]"):
-                    updated_header.append(f"[TEST] Export ID: {st.session_state['export_id']}")
-                else:
-                    updated_header.append(line)
-
-            filename = f"{luminaire_name_base.split('-')[0].strip()}_{length:.3f}m.ies"
-            new_file = create_ies_file(updated_header, scaled_data)
-            files_to_zip[filename] = new_file
-
-        zip_buffer = create_zip(files_to_zip)
-
-        st.download_button("Generate IES Files & Download ZIP", data=zip_buffer, file_name="Optimised_IES_Files.zip", mime="application/zip")
+        st.info("No lengths selected yet. Click above to add lengths.")
 
 else:
-    st.info("Upload an IES file to begin optimisation.")
+    st.warning("⚠️ Upload an IES file to begin optimisation.")
+
