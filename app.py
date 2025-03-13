@@ -15,7 +15,7 @@ if 'locked' not in st.session_state:
     st.session_state['led_pitch'] = 56.0
     st.session_state['led_efficiency_gain_percent'] = 0.0
     st.session_state['efficiency_reason'] = 'Current Generation'
-    st.session_state['lm_per_watt_increment'] = 115.0  # Step increment default
+    st.session_state['lm_per_watt_increment'] = 115.0
     st.session_state['export_id'] = datetime.now().strftime("%Y%m%d%H%M%S")
 
 # === FILE UPLOAD ===
@@ -88,28 +88,87 @@ if uploaded_file:
             st.session_state['led_pitch'] = st.number_input(
                 "LED Series Module Pitch (mm)", min_value=14.0, value=56.0, step=0.1)
 
-        # === SELECT LENGTHS ===
-        st.markdown("### Select Lengths")
-        desired_length_m = st.number_input("Desired Length (m)", min_value=0.5, value=1.000, step=0.001, format="%.3f")
+    # === SELECT LENGTHS ===
+    st.markdown("### Select Lengths")
+    desired_length_m = st.number_input("Desired Length (m)", min_value=0.5, value=1.000, step=0.001, format="%.3f")
 
-        # Short/long length calc
-        desired_length_mm = desired_length_m * 1000
-        min_length_mm = (int((desired_length_mm - st.session_state['end_plate_thickness'] * 2) / st.session_state['led_pitch'])) * st.session_state['led_pitch'] + st.session_state['end_plate_thickness'] * 2
-        max_length_mm = min_length_mm + st.session_state['led_pitch']
+    # Short/long length calc
+    desired_length_mm = desired_length_m * 1000
+    min_length_mm = (int((desired_length_mm - st.session_state['end_plate_thickness'] * 2) / st.session_state['led_pitch'])) * st.session_state['led_pitch'] + st.session_state['end_plate_thickness'] * 2
+    max_length_mm = min_length_mm + st.session_state['led_pitch']
 
-        shorter_length_m = round(min_length_mm / 1000, 3)
-        longer_length_m = round(max_length_mm / 1000, 3)
+    shorter_length_m = round(min_length_mm / 1000, 3)
+    longer_length_m = round(max_length_mm / 1000, 3)
 
-        col1, col2 = st.columns(2)
-        if col1.button(f"Add Shorter Buildable Length: {shorter_length_m:.3f} m"):
-            st.session_state['lengths_list'].append(shorter_length_m)
-            st.session_state['locked'] = True
-            st.rerun()
+    if st.button(f"Add Shorter Buildable Length: {shorter_length_m:.3f} m"):
+        st.session_state['lengths_list'].append(shorter_length_m)
+        st.session_state['locked'] = True
+        st.rerun()
 
-        if col2.button(f"Add Longer Buildable Length: {longer_length_m:.3f} m"):
-            st.session_state['lengths_list'].append(longer_length_m)
-            st.session_state['locked'] = True
-            st.rerun()
+    if st.button(f"Add Longer Buildable Length: {longer_length_m:.3f} m"):
+        st.session_state['lengths_list'].append(longer_length_m)
+        st.session_state['locked'] = True
+        st.rerun()
+
+    # === SELECTED LENGTHS TABLE (Moved Up Under Lengths Section) ===
+    st.markdown("## 📏 Selected Lengths for IES Generation")
+    if st.session_state['lengths_list']:
+        table_rows = []
+
+        base_lm_per_m = 400.0
+        base_w_per_m = 11.6
+        efficiency_multiplier = 1 - (st.session_state['led_efficiency_gain_percent'] / 100.0)
+        new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
+        new_lm_per_m = round(base_lm_per_m, 1)
+
+        for idx, length in enumerate(st.session_state['lengths_list']):
+            total_lumens = round(new_lm_per_m * length, 1)
+            total_watts = round(new_w_per_m * length, 1)
+            lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
+
+            tier = "Professional" if st.session_state['led_efficiency_gain_percent'] != 0 else "Core"
+            luminaire_file_name = f"{luminaire_name_base} Diffused Down_{length:.3f}m_{tier}"
+
+            row = {
+                "Delete": "🗑️",
+                "Length (m)": f"{length:.3f}",
+                "Luminaire & IES File Name": luminaire_file_name,
+                "CRI": cri_value,
+                "CCT": cct_value,
+                "Total Lumens": f"{total_lumens:.1f}",
+                "Total Watts": f"{total_watts:.1f}",
+                "Settings lm/W": f"{lm_per_w:.1f}",
+                "Comments": st.session_state['efficiency_reason']
+            }
+
+            table_rows.append(row)
+
+        # Display headers
+        headers = ["", "Length (m)", "Luminaire & IES File Name", "CRI", "CCT", "Total Lumens", "Total Watts", "Settings lm/W", "Comments"]
+        header_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
+        for col, header in zip(header_cols, headers):
+            col.markdown(f"**{header}**")
+
+        # Display rows
+        for idx, row in enumerate(table_rows):
+            cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
+
+            if cols[0].button("🗑️", key=f"delete_{idx}"):
+                st.session_state['lengths_list'].pop(idx)
+                if not st.session_state['lengths_list']:
+                    st.session_state['locked'] = False
+                st.rerun()
+
+            row_data = [row["Length (m)"], row["Luminaire & IES File Name"], row["CRI"], row["CCT"],
+                        row["Total Lumens"], row["Total Watts"], row["Settings lm/W"], row["Comments"]]
+            for col, val in zip(cols[1:], row_data):
+                col.write(val)
+
+        export_df = pd.DataFrame(table_rows).drop(columns=['Delete'])
+        st.download_button("Download CSV Summary", data=export_df.to_csv(index=False).encode('utf-8'),
+                           file_name="Selected_Lengths_Summary.csv", mime="text/csv")
+    else:
+        st.info("No lengths selected yet. Click a button above to add lengths.")
 
     # === LED CHIPSET ADJUSTMENT ===
     with st.expander("💡 LED Chipset Adjustment", expanded=False):
@@ -139,69 +198,7 @@ if uploaded_file:
                 "Average lm/W Step Increment", min_value=10.0, max_value=500.0,
                 value=st.session_state['lm_per_watt_increment'], step=1.0)
 
-    # === SELECTED LENGTHS TABLE ===
-    st.markdown("## 📏 Selected Lengths for IES Generation")
-    if st.session_state['lengths_list']:
-        table_rows = []
-
-        # Base assumptions
-        base_lm_per_m = 400.0
-        base_w_per_m = 11.6
-        efficiency_multiplier = 1 - (st.session_state['led_efficiency_gain_percent'] / 100.0)
-        new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
-        new_lm_per_m = round(base_lm_per_m, 1)
-
-        for idx, length in enumerate(st.session_state['lengths_list']):
-            total_lumens = round(new_lm_per_m * length, 1)
-            total_watts = round(new_w_per_m * length, 1)
-            lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
-
-            tier = "Professional" if st.session_state['led_efficiency_gain_percent'] != 0 else "Core"
-            luminaire_file_name = f"{luminaire_name_base} Diffused Down_{length:.3f}m_{tier}"
-
-            row = {
-                "Delete": "🗑️",
-                "Length (m)": f"{length:.3f}",
-                "Luminaire & IES File Name": luminaire_file_name,
-                "CRI": cri_value,
-                "CCT": cct_value,
-                "Total Lumens": f"{total_lumens:.1f}",
-                "Total Watts": f"{total_watts:.1f}",
-                "Settings lm/W": f"{lm_per_w:.1f}",
-                "Comments": st.session_state['efficiency_reason']
-            }
-
-            table_rows.append(row)
-
-        # Display table headers
-        headers = ["", "Length (m)", "Luminaire & IES File Name", "CRI", "CCT", "Total Lumens", "Total Watts", "Settings lm/W", "Comments"]
-        header_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
-        for col, header in zip(header_cols, headers):
-            col.markdown(f"**{header}**")
-
-        # Display table rows
-        for idx, row in enumerate(table_rows):
-            cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
-
-            if cols[0].button("🗑️", key=f"delete_{idx}"):
-                st.session_state['lengths_list'].pop(idx)
-                if not st.session_state['lengths_list']:
-                    st.session_state['locked'] = False
-                st.rerun()
-
-            row_data = [row["Length (m)"], row["Luminaire & IES File Name"], row["CRI"], row["CCT"],
-                        row["Total Lumens"], row["Total Watts"], row["Settings lm/W"], row["Comments"]]
-            for col, val in zip(cols[1:], row_data):
-                col.write(val)
-
-        # CSV Export
-        export_df = pd.DataFrame(table_rows).drop(columns=['Delete'])
-        st.download_button("Download CSV Summary", data=export_df.to_csv(index=False).encode('utf-8'),
-                           file_name="Selected_Lengths_Summary.csv", mime="text/csv")
-    else:
-        st.info("No lengths selected yet. Click a button above to add lengths.")
-
-    # === DESIGN OPTIMISATION SECTION (Placeholder) ===
+    # === DESIGN OPTIMISATION ===
     with st.expander("🎯 Design Optimisation", expanded=False):
         st.subheader("Target vs Achieved Lux Levels")
         target_lux = st.number_input("Target Lux Level", min_value=0.0, value=400.0, step=1.0)
@@ -225,3 +222,4 @@ if uploaded_file:
                 st.success(f"✅ Consider increasing by {increments_needed} increments to meet target lux.")
 
         st.info("Note: This enables theoretical model accuracy for future optimisations.")
+
