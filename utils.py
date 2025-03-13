@@ -1,20 +1,40 @@
-# utils.py
-
 import re
 
-def parse_luminaire_description(description):
-    """
-    Extract CRI and CCT from luminaire description.
-    Expected format: "BLine 8585D 11.6W - 80CRI - 3000K"
-    """
-    try:
-        cri_match = re.search(r'(\d{2})CRI', description)
-        cct_match = re.search(r'(\d{4})K', description)
+def parse_ies_file(file):
+    content = file.read().decode("utf-8")
 
-        cri = f"{cri_match.group(1)}CRI" if cri_match else "N/A"
-        cct = f"{cct_match.group(1)}K" if cct_match else "N/A"
+    # Basic example parse. You can expand parsing if necessary.
+    data = {
+        "IESNA Version": extract_value(r"IESNA:(.*?)\n", content),
+        "Test": extract_value(r"\[TEST\](.*?)\n", content),
+        "Manufacturer": extract_value(r"\[MANUFAC\](.*?)\n", content),
+        "Luminaire Catalog Number": extract_value(r"\[LUMCAT\](.*?)\n", content),
+        "Luminaire Description": extract_value(r"\[LUMINAIRE\](.*?)\n", content),
+        "Issued Date": extract_value(r"\[ISSUEDATE\](.*?)\n", content)
+    }
 
-        return cri, cct
-    except Exception as e:
-        print(f"Error parsing description: {e}")
-        return "N/A", "N/A"
+    # You can add more parsing here for other parameters.
+    return data
+
+def extract_value(pattern, text):
+    match = re.search(pattern, text)
+    if match:
+        return match.group(1).strip()
+    return "N/A"
+
+def modify_candela_data(original_data, multiplier):
+    """
+    Placeholder function. Modify candela data with multiplier.
+    """
+    modified_data = original_data * multiplier
+    return modified_data
+
+def create_ies_file(base_data, modified_candela_data, output_filename):
+    """
+    Placeholder function for generating a new IES file.
+    """
+    with open(output_filename, "w") as f:
+        f.write(base_data)
+        # Append or replace candela data here
+        f.write("\nMODIFIED DATA PLACEHOLDER\n")
+    return output_filename
