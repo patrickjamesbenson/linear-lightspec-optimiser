@@ -1,8 +1,10 @@
+# utils.py
+
 import re
 
 def parse_luminaire_description(description):
     """
-    Extracts CRI and CCT from luminaire description.
+    Extract CRI and CCT from luminaire description.
     Expected format: "BLine 8585D 11.6W - 80CRI - 3000K"
     """
     try:
