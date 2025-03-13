@@ -1,20 +1,21 @@
 import streamlit as st
 import pandas as pd
-from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
 from datetime import datetime
+from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 st.title("Linear LightSpec Optimiser")
 
-# === SESSION STATE INITIALISATION ===
+# === SESSION STATE INITIALISE ===
 if 'locked' not in st.session_state:
-    st.session_state['locked'] = True
+    st.session_state['locked'] = False
     st.session_state['lengths_list'] = []
     st.session_state['end_plate_thickness'] = 5.5
     st.session_state['led_pitch'] = 56.0
     st.session_state['led_efficiency_gain_percent'] = 0.0
-    st.session_state['efficiency_reason'] = 'Current Generation'
+    st.session_state['efficiency_reason'] = "Current Generation"
+    st.session_state['lmw_increment'] = 115.0
     st.session_state['export_id'] = datetime.now().strftime("%Y%m%d%H%M%S")
 
 # === FILE UPLOAD ===
@@ -24,206 +25,164 @@ if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     parsed = parse_ies_file(file_content)
 
-    # === EXTRACT BASE INFO ===
-    luminaire_info = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), "[LUMINAIRE] Not Found")
-    luminaire_name_base = luminaire_info.replace("[LUMINAIRE]", "").strip()
+    # === EXTRACT LUMINAIRE INFO ===
+    luminaire_line = next((line for line in parsed['header'] if line.startswith("[LUMINAIRE]")), None)
+    luminaire_desc = luminaire_line.replace("[LUMINAIRE]", "").strip() if luminaire_line else "Unknown"
 
-    cri_value = "N/A"
-    cct_value = "N/A"
+    # Parse Optic from description (placeholder if missing)
+    optic = "Diffused Down" if "Diffused Down" in luminaire_desc else "Unknown Optic"
 
-    parts = luminaire_name_base.split('-')
-    if len(parts) >= 3:
-        cri_value = parts[-2].strip()
-        cct_value = parts[-1].strip()
+    # CRI and CCT (fallback to N/A)
+    cri_value = next((val for val in luminaire_desc.split() if "CRI" in val), "N/A")
+    cct_value = next((val for val in luminaire_desc.split() if "K" in val), "N/A")
 
     # === BASE FILE SUMMARY ===
     with st.expander("📂 Base File Summary (IES Metadata + Photometric Parameters)", expanded=False):
-        metadata = {
-            "IES Version": next((line for line in parsed['header'] if line.startswith("IESNA")), "Not Found"),
-            "Test Info": next((line for line in parsed['header'] if line.startswith("[TEST]")), "[TEST] Not Found"),
-            "Manufacturer": next((line for line in parsed['header'] if line.startswith("[MANUFAC]")), "[MANUFAC] Not Found"),
-            "Luminaire Catalog Number": next((line for line in parsed['header'] if line.startswith("[LUMCAT]")), "[LUMCAT] Not Found"),
-            "Luminaire Description": luminaire_info,
-            "Issued Date": next((line for line in parsed['header'] if line.startswith("[ISSUEDATE]")), "[ISSUEDATE] Not Found")
+        ies_meta = {
+            "IES Version": next((l for l in parsed['header'] if l.startswith("IESNA")), "Unknown"),
+            "Test Info": next((l for l in parsed['header'] if l.startswith("[TEST]")), "Unknown"),
+            "Manufacturer": next((l for l in parsed['header'] if l.startswith("[MANUFAC]")), "Unknown"),
+            "Luminaire Catalog Number": next((l for l in parsed['header'] if l.startswith("[LUMCAT]")), "Unknown"),
+            "Luminaire Description": luminaire_desc,
+            "Issued Date": next((l for l in parsed['header'] if l.startswith("[ISSUEDATE]")), "Unknown")
         }
 
         st.markdown("### IES Metadata")
-        st.table(pd.DataFrame.from_dict(metadata, orient='index', columns=['Value']))
+        st.table(pd.DataFrame.from_dict(ies_meta, orient='index', columns=['Value']))
 
-        photometric_line = parsed['data'][0] if parsed['data'] else ""
-        photometric_params = photometric_line.strip().split()
-
-        if len(photometric_params) >= 13:
-            labels = [
+        st.markdown("### Photometric Parameters")
+        photo_params = parsed['data'][0].strip().split()
+        if len(photo_params) >= 13:
+            param_labels = [
                 "Number of Lamps", "Lumens per Lamp", "Candela Multiplier",
                 "Vertical Angles", "Horizontal Angles", "Photometric Type",
                 "Units Type", "Width (m)", "Length (m)", "Height (m)",
                 "Ballast Factor", "Future Use", "Input Watts"
             ]
-            param_data = {label: value for label, value in zip(labels, photometric_params[:13])}
-            st.markdown("### Photometric Parameters")
+            param_data = {label: val for label, val in zip(param_labels, photo_params)}
             st.table(pd.DataFrame.from_dict(param_data, orient='index', columns=['Value']))
         else:
-            st.warning("Photometric Parameters not found or incomplete.")
+            st.warning("Photometric parameters incomplete.")
 
     # === BASE BUILD METHODOLOGY ===
     with st.expander("📂 Base Build Methodology", expanded=False):
+        # Lock/Unlock logic based on length selection
         if st.session_state['lengths_list']:
-            st.info("🔒 Base Build locked because lengths have been selected.")
-        else:
-            if st.session_state['locked']:
-                if st.button("🔓 Unlock Base Build Methodology"):
-                    st.session_state['locked'] = False
-            else:
-                if st.button("🔒 Lock Base Build Methodology"):
-                    st.session_state['locked'] = True
-
-        if st.session_state['locked']:
+            st.session_state['locked'] = True
             st.info(f"🔒 Locked: End Plate Expansion Gutter = {st.session_state['end_plate_thickness']} mm | LED Series Module Pitch = {st.session_state['led_pitch']} mm")
         else:
-            st.warning("⚠️ Adjust these only if you understand the impact on manufacturability.")
-            st.session_state['end_plate_thickness'] = st.number_input("End Plate Expansion Gutter (mm)", min_value=0.0, value=5.5, step=0.1)
-            st.session_state['led_pitch'] = st.number_input("LED Series Module Pitch (mm)", min_value=14.0, value=56.0, step=0.1)
+            st.session_state['locked'] = False
+            st.session_state['end_plate_thickness'] = st.number_input("End Plate Expansion Gutter (mm)", min_value=0.0, value=st.session_state['end_plate_thickness'], step=0.1)
+            st.session_state['led_pitch'] = st.number_input("LED Series Module Pitch (mm)", min_value=14.0, value=st.session_state['led_pitch'], step=0.1)
 
     # === SELECT LENGTHS ===
     st.markdown("## Select Lengths")
-    desired_length_m = st.number_input("Desired Length (m)", min_value=0.5, value=1.000, step=0.001, format="%.3f")
-    desired_length_mm = desired_length_m * 1000
-    min_length_mm = (int((desired_length_mm - st.session_state['end_plate_thickness'] * 2) / st.session_state['led_pitch'])) * st.session_state['led_pitch'] + st.session_state['end_plate_thickness'] * 2
-    max_length_mm = min_length_mm + st.session_state['led_pitch']
+    desired_length = st.number_input("Desired Length (m)", min_value=0.5, value=1.0, step=0.001, format="%.3f")
+    pitch = st.session_state['led_pitch']
+    gutter = st.session_state['end_plate_thickness']
 
-    shorter_length_m = round(min_length_mm / 1000, 3)
-    longer_length_m = round(max_length_mm / 1000, 3)
+    min_len = (int((desired_length * 1000 - gutter * 2) / pitch)) * pitch + gutter * 2
+    max_len = min_len + pitch
 
-    if st.button(f"Add Shorter Buildable Length: {shorter_length_m:.3f} m"):
-        st.session_state['lengths_list'].append(shorter_length_m)
-        st.session_state['locked'] = True
-        st.rerun()
+    shorter_len = round(min_len / 1000, 3)
+    longer_len = round(max_len / 1000, 3)
 
-    if st.button(f"Add Longer Buildable Length: {longer_length_m:.3f} m"):
-        st.session_state['lengths_list'].append(longer_length_m)
-        st.session_state['locked'] = True
-        st.rerun()
+    col1, col2 = st.columns(2)
+    if col1.button(f"Add Shorter Buildable Length: {shorter_len:.3f} m"):
+        st.session_state['lengths_list'].append(shorter_len)
+    if col2.button(f"Add Longer Buildable Length: {longer_len:.3f} m"):
+        st.session_state['lengths_list'].append(longer_len)
 
     # === LED CHIPSET ADJUSTMENT ===
     with st.expander("💡 LED Chipset Adjustment", expanded=False):
-        led_efficiency_gain_percent = st.number_input("LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0,
-                                                      value=st.session_state.get('led_efficiency_gain_percent', 0.0),
-                                                      step=1.0)
+        if st.session_state['lengths_list']:
+            st.info("🔒 Locked: Adjustment in effect")
+        else:
+            adj = st.number_input("LED Chipset Adjustment (%)", min_value=-50.0, max_value=100.0, value=st.session_state['led_efficiency_gain_percent'], step=1.0)
+            reason = st.text_input("Reason (e.g., Gen 2 LED +15% increase lumen output)", value=st.session_state['efficiency_reason'])
+            st.session_state['led_efficiency_gain_percent'] = adj
+            st.session_state['efficiency_reason'] = reason if reason else "Current Generation"
 
-        efficiency_reason = st.text_input("Reason (e.g., Gen 2 LED +15% increase lumen output)",
-                                          value=st.session_state.get('efficiency_reason', 'Current Generation'))
-
-        if led_efficiency_gain_percent != 0 and (efficiency_reason.strip() == "" or efficiency_reason == "Current Generation"):
-            st.error("⚠️ You must provide a reason for the LED Chipset Adjustment before proceeding.")
-            st.stop()
-
-        st.session_state['led_efficiency_gain_percent'] = led_efficiency_gain_percent
-        st.session_state['efficiency_reason'] = efficiency_reason
+    # === AVERAGE LM/W STEP INCREMENT ===
+    with st.expander("🔒 Average lm/W Step Increment", expanded=False):
+        st.markdown("""
+        115 lm/W is the average lumens per watt deviation across ECG driver power change increments in our current range.  
+        For advanced users only.
+        """)
+        if st.session_state['lengths_list']:
+            st.info(f"🔒 Locked at: {st.session_state['lmw_increment']} lm/W")
+        else:
+            st.session_state['lmw_increment'] = st.number_input("Average lm/W Step Increment", min_value=1.0, max_value=500.0, value=st.session_state['lmw_increment'], step=1.0)
 
     # === SELECTED LENGTHS TABLE ===
     st.markdown("## 📏 Selected Lengths for IES Generation")
-    if st.session_state['lengths_list']:
+    if not st.session_state['lengths_list']:
+        st.warning("⚠️ No lengths selected. Please select build lengths to proceed.")
+    else:
         table_rows = []
-
-        # Base values
         base_lm_per_m = 400.0
         base_w_per_m = 11.6
-
-        efficiency_multiplier = 1 - (led_efficiency_gain_percent / 100.0)
-        new_w_per_m = round(base_w_per_m * efficiency_multiplier, 1)
-        new_lm_per_m = round(base_lm_per_m, 1)
+        eff_gain = st.session_state['led_efficiency_gain_percent'] / 100.0
 
         for length in st.session_state['lengths_list']:
-            total_lumens = round(new_lm_per_m * length, 1)
-            total_watts = round(new_w_per_m * length, 1)
-            lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
+            lm_per_m = base_lm_per_m
+            w_per_m = round(base_w_per_m * (1 - eff_gain), 1)
 
-            # Tier logic
-            if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
-                tier = "Bespoke"
-            elif led_efficiency_gain_percent != 0:
+            total_lumens = round(lm_per_m * length, 1)
+            total_watts = round(w_per_m * length, 1)
+            lm_per_w = round(total_lumens / total_watts, 1) if total_watts else 0.0
+
+            tier = "Core"
+            if st.session_state['led_efficiency_gain_percent'] != 0:
                 tier = "Professional"
-            elif st.session_state['led_pitch'] % 4 != 0:
-                tier = "Advanced"
-            else:
-                tier = "Core"
+            if st.session_state['led_pitch'] != 56.0 or st.session_state['end_plate_thickness'] != 5.5:
+                tier = "Bespoke"
 
-            luminaire_file_name = f"{luminaire_name_base}_{length:.3f}m_{tier}"
+            lum_file_name = f"{luminaire_desc.split(' ')[0]} {optic} {length:.3f}m_{tier}"
 
-            row = {
-                "Delete": "🗑️",
+            table_rows.append({
                 "Length (m)": f"{length:.3f}",
-                "Luminaire & IES File Name": luminaire_file_name,
+                "Luminaire & IES File Name": lum_file_name,
                 "CRI": cri_value,
                 "CCT": cct_value,
                 "Total Lumens": f"{total_lumens:.1f}",
                 "Total Watts": f"{total_watts:.1f}",
                 "Settings lm/W": f"{lm_per_w:.1f}",
-                "Comments": efficiency_reason if led_efficiency_gain_percent != 0 else ""
-            }
+                "Comments": st.session_state['efficiency_reason']
+            })
 
-            table_rows.append(row)
+        st.dataframe(pd.DataFrame(table_rows))
 
-        # === DISPLAY TABLE HEADERS ===
-        header_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
-        headers = ["", "Length (m)", "Luminaire & IES File Name", "CRI", "CCT", "Total Lumens", "Total Watts", "Settings lm/W", "Comments"]
-        for col, h in zip(header_cols, headers):
-            col.markdown(f"**{h}**")
+        # CSV Export
+        df_export = pd.DataFrame(table_rows)
+        st.download_button("📥 Download CSV Summary", data=df_export.to_csv(index=False).encode('utf-8'), file_name="Lengths_Summary.csv", mime="text/csv")
 
-        # === DISPLAY TABLE ROWS ===
-        for idx, row in enumerate(table_rows):
-            row_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
-
-            if row_cols[0].button("🗑️", key=f"delete_{idx}"):
-                st.session_state['lengths_list'].pop(idx)
-                if len(st.session_state['lengths_list']) == 0:
-                    st.session_state['locked'] = False
-                st.rerun()
-
-            row_data = [row["Length (m)"], row["Luminaire & IES File Name"], row["CRI"], row["CCT"],
-                        row["Total Lumens"], row["Total Watts"], row["Settings lm/W"], row["Comments"]]
-
-            for col, val in zip(row_cols[1:], row_data):
-                col.write(val)
-
-        # === CSV EXPORT ===
-        export_df = pd.DataFrame([{
-            "Length (m)": r["Length (m)"],
-            "Luminaire & IES File Name": r["Luminaire & IES File Name"],
-            "CRI": r["CRI"],
-            "CCT": r["CCT"],
-            "Total Lumens": r["Total Lumens"],
-            "Total Watts": r["Total Watts"],
-            "Settings lm/W": r["Settings lm/W"],
-            "Comments": r["Comments"]
-        } for r in table_rows])
-
-        st.download_button("Download CSV Summary", data=export_df.to_csv(index=False).encode('utf-8'), file_name="Selected_Lengths_Summary.csv", mime="text/csv")
+    # === DESIGN OPTIMISATION ===
+    st.markdown("🎯 Design Optimisation")
+    if not st.session_state['lengths_list']:
+        st.warning("⚠️ No lengths selected. Optimisation disabled.")
     else:
-        st.info("No lengths selected yet. Click a button above to add lengths.")
+        st.subheader("Target vs Achieved Lux Levels")
+        target_lux = st.number_input("Target Lux Level", min_value=0.0, value=400.0, step=1.0)
+        achieved_lux = st.number_input("Achieved Lux Level", min_value=0.0, value=405.0, step=1.0)
 
-    # === GENERATE OPTIMISED IES FILES ===
-    st.markdown("## Generate Optimised IES Files")
+        diff_percent = round((achieved_lux - target_lux) / target_lux * 100, 1)
+        st.write(f"Difference: {diff_percent}%")
+
+        required_change = abs(diff_percent / 100) * base_lm_per_m
+        increments_needed = (required_change / st.session_state['lmw_increment'])
+
+        if increments_needed < 1:
+            st.warning(f"⚠️ Dimming recommended to match target lux.")
+        else:
+            st.info(f"⚠️ Consider {'reducing' if diff_percent > 0 else 'increasing'} by {int(increments_needed + 0.9)} increments.")
+
+        st.caption("Note: This enables theoretical model accuracy for future optimisations.")
+
+    # === GENERATE IES FILES ===
     if st.session_state['lengths_list']:
-        files_to_zip = {}
-        for length in st.session_state['lengths_list']:
-            scaled_data = modify_candela_data(parsed['data'], 1.0)
-
-            updated_header = []
-            for line in parsed['header']:
-                if line.startswith("[TEST]"):
-                    updated_header.append(f"[TEST] Export ID: {st.session_state['export_id']}")
-                else:
-                    updated_header.append(line)
-
-            new_file = create_ies_file(updated_header, scaled_data)
-            filename = f"{luminaire_name_base}_{length:.3f}m.ies"
-            files_to_zip[filename] = new_file
-
-        zip_buffer = create_zip(files_to_zip)
-
-        st.download_button("Generate IES Files & Download ZIP", data=zip_buffer, file_name="Optimised_IES_Files.zip", mime="application/zip")
+        if st.button("Generate Optimised IES Files"):
+            st.success("✅ IES Files Generation Complete! (Placeholder logic)")
 
 else:
-    st.info("Upload an IES file to begin optimisation.")
+    st.info("Upload your Base IES file to begin optimisation.")
