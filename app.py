@@ -114,7 +114,6 @@ if uploaded_file:
     if st.session_state['lengths_list']:
         table_rows = []
 
-        # Base values (placeholder, can be dynamic later)
         base_lm_per_m = 400.0
         base_w_per_m = 11.6
         efficiency_multiplier = 1 - (st.session_state['led_efficiency_gain_percent'] / 100.0)
@@ -126,13 +125,10 @@ if uploaded_file:
             total_watts = round(new_w_per_m * length, 1)
             lm_per_w = round(total_lumens / total_watts, 1) if total_watts != 0 else 0.0
 
-            # Tier logic
             if st.session_state['end_plate_thickness'] != 5.5 or st.session_state['led_pitch'] != 56.0:
                 tier = "Bespoke"
             elif st.session_state['led_efficiency_gain_percent'] != 0:
                 tier = "Professional"
-            elif st.session_state['led_pitch'] % 4 != 0:
-                tier = "Advanced"
             else:
                 tier = "Core"
 
@@ -152,13 +148,13 @@ if uploaded_file:
 
             table_rows.append(row)
 
-        # Display Table Headers
+        # Headers
         header_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
         headers = ["", "Length (m)", "Luminaire & IES File Name", "CRI", "CCT", "Total Lumens", "Total Watts", "Settings lm/W", "Comments"]
         for col, h in zip(header_cols, headers):
             col.markdown(f"**{h}**")
 
-        # Display Rows
+        # Rows
         for idx, row in enumerate(table_rows):
             row_cols = st.columns([1, 2, 4, 1, 1, 2, 2, 2, 3])
 
