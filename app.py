@@ -18,26 +18,24 @@ if 'advanced_unlocked' not in st.session_state:
 with st.sidebar:
     st.subheader("⚙️ Advanced Settings")
 
-    with st.expander("Customisation", expanded=False):
-        # MATRIX UPLOAD / DOWNLOAD
-        st.markdown("### 📁 Matrix Upload / Download")
+    # === MATRIX UPLOAD / DOWNLOAD ===
+    with st.expander("📁 Matrix Upload / Download", expanded=False):
         matrix_file = st.file_uploader("Upload Matrix CSV", type=["csv"])
         if matrix_file:
             st.session_state['matrix_lookup'] = pd.read_csv(matrix_file)
             st.success(f"Matrix Uploaded: {matrix_file.name}")
 
-        # ADVANCED LED PARAMETERS
+    # === ADVANCED SETTINGS ===
+    with st.expander("Customisation", expanded=False):
         st.markdown("### Advanced LED Parameters")
         led_pitch_set = st.number_input("LED Pitch Set (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
         leds_per_pitch_set = st.number_input("LEDs per Pitch Set", min_value=1, max_value=12, value=6)
 
-        # COMPONENT LENGTHS
         st.markdown("### Component Lengths")
         end_plate_thickness = st.number_input("End Plate Thickness (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1)
         pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
         spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
 
-        # Unlock Advanced Mode
         if st.button("Unlock Advanced Settings"):
             st.session_state['advanced_unlocked'] = True
             st.warning("Super Advanced Users Only: Changes require mandatory comments!")
@@ -84,15 +82,32 @@ def compute_lumen_data(photometric_params):
     lumens_per_m = round(total_lumens / photometric_params[8], 1) if photometric_params[8] > 0 else 0
     return total_lumens, input_watts, efficacy_lm_per_w, lumens_per_m
 
-# === DISPLAY PHOTOMETRIC + COMPUTED BASELINE ===
+# === DISPLAY IES METADATA + PHOTOMETRIC PARAMETERS + COMPUTED BASELINE ===
 if st.session_state['ies_files']:
-    st.subheader("📏 Photometric Parameters")
     ies_file = st.session_state['ies_files'][0]
     header_lines, photometric_params = parse_ies_file(ies_file['content'])
 
+    # IES Metadata display
+    st.markdown("### 📄 Parsed IES Metadata (Header)")
+    if header_lines:
+        for line in header_lines:
+            st.text(line)
+    else:
+        st.warning("No header data found.")
+
+    # Photometric Parameters display
+    st.markdown("### 📏 Photometric Parameters")
+    if photometric_params:
+        param_table = [{"Index": idx, "Value": val} for idx, val in enumerate(photometric_params)]
+        param_df = pd.DataFrame(param_table)
+        st.table(param_df.style.format({"Value": "{:.1f}"}))
+    else:
+        st.warning("No photometric parameters found.")
+
+    # Computed Baseline Data display
+    st.markdown("### ✨ Computed Baseline Data")
     total_lumens, input_watts, efficacy_lm_per_w, lumens_per_m = compute_lumen_data(photometric_params)
 
-    st.subheader("✨ Computed Baseline Data")
     baseline_data = [
         {"Description": "Total Lumens", "Value": total_lumens},
         {"Description": "Input Watts", "Value": input_watts},
@@ -103,4 +118,4 @@ if st.session_state['ies_files']:
     st.table(baseline_df.style.format({"Value": "{:.1f}"}))
 
 # === FOOTER ===
-st.caption("Version 2.1a - Sidebar Customisation, IES Metadata, Photometric & Baseline Display.")
+st.caption("Version 2.1b - Sidebar and Main Page Structural Fixes")
