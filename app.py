@@ -17,15 +17,30 @@ if 'matrix_version' not in st.session_state:
 if 'advanced_unlocked' not in st.session_state:
     st.session_state['advanced_unlocked'] = False
 if 'led_scaling' not in st.session_state:
-    st.session_state['led_scaling'] = 0.0
+    st.session_state['led_scaling'] = 0.0  # Default to 0%
 
 # === SIDEBAR ===
 with st.sidebar:
     st.subheader("⚙️ Advanced Settings")
 
     with st.expander("Customisation", expanded=False):
-        st.markdown("### 📁 Matrix Upload / Download")
 
+        # 1. LED Version Chip Scaling
+        st.markdown("### 🔧 LED Version 'Chip Scaling' (%)")
+        scaling = st.number_input("LED Version 'Chip Scaling'",
+                                  min_value=-50.0, max_value=50.0,
+                                  value=st.session_state['led_scaling'],
+                                  step=0.1)
+        st.session_state['led_scaling'] = scaling
+
+        # 2. Component Lengths
+        st.markdown("### Component Lengths")
+        end_plate_thickness = st.number_input("End Plate Thickness (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1)
+        pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
+        spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
+
+        # 3. Matrix Upload / Download
+        st.markdown("### 📁 Matrix Upload / Download")
         matrix_file = st.file_uploader("Upload Matrix CSV", type=["csv"])
         if matrix_file:
             df_new_matrix = pd.read_csv(matrix_file)
@@ -48,19 +63,6 @@ with st.sidebar:
             current_matrix = st.session_state['matrix_lookup']
             csv = current_matrix.to_csv(index=False).encode('utf-8')
             st.download_button("Download Matrix CSV", csv, "matrix_current.csv", "text/csv")
-
-        st.markdown("### 🛠️ Advanced LED Parameters")
-        led_pitch_set = st.number_input("LED Pitch Set (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
-        leds_per_pitch_set = st.number_input("LEDs per Pitch Set", min_value=1, max_value=12, value=6)
-
-        st.markdown("### Component Lengths")
-        end_plate_thickness = st.number_input("End Plate Thickness (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1)
-        pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
-        spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
-
-        st.markdown("### 🔧 LED Version 'Chip Scaling' (%)")
-        scaling = st.number_input("LED Version 'Chip Scaling'", min_value=-50.0, max_value=50.0, value=st.session_state['led_scaling'], step=0.1)
-        st.session_state['led_scaling'] = scaling
 
         if st.button("Unlock Advanced Settings"):
             st.session_state['advanced_unlocked'] = True
@@ -131,30 +133,42 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
-def parse_lumcat_code(lumcat_code):
-    """ Parse and map LUMCAT Code """
-    lookup_df = st.session_state['matrix_lookup']
-    if lookup_df.empty or not lumcat_code:
-        return pd.DataFrame([{"Type": "LUMCAT", "Value": "No data / Matrix not loaded"}])
+def parse_lumcat(lumcat_code, lookup_df):
+    lumcat_code = lumcat_code.strip()
 
-    # Extract parts (update index logic as per LUMCAT format)
-    diffuser_code = lumcat_code[6:8]
-    wiring_code = lumcat_code[8:9]
-    driver_code = lumcat_code[9:11]
-    cri_code = lumcat_code[14:16]
-    cct_code = lumcat_code[16:18]
+    diffuser_code = lumcat_code[6:8].strip()
+    wiring_code = lumcat_code[8:9].strip()
+    driver_code = lumcat_code[9:11].strip()
+    cri_code = lumcat_code[14:16].strip()
+    cct_code = lumcat_code[16:18].strip()
 
-    def get_value(code, col_code, col_desc):
-        result = lookup_df.loc[lookup_df[col_code] == code, col_desc].values
-        return result[0] if len(result) > 0 else "Unknown"
+    # Debug outputs
+    st.write("Parsed Codes:", {
+        "Diffuser": diffuser_code,
+        "Wiring": wiring_code,
+        "Driver": driver_code,
+        "CRI": cri_code,
+        "CCT": cct_code
+    })
 
-    return pd.DataFrame([
-        {"Type": "Diffuser / Louvre", "Value": get_value(diffuser_code, 'Diffuser / Louvre Code', 'Diffuser / Louvre Description')},
-        {"Type": "Wiring", "Value": get_value(wiring_code, 'Wiring Code', 'Wiring Description')},
-        {"Type": "Driver", "Value": get_value(driver_code, 'Driver Code', 'Driver Description')},
-        {"Type": "CRI", "Value": get_value(cri_code, 'CRI Code', 'CRI Description')},
-        {"Type": "CCT", "Value": get_value(cct_code, 'CCT/Colour Code', 'CCT/Colour Description')}
-    ])
+    result = []
+
+    if not lookup_df.empty:
+        df = lookup_df.copy()
+
+        diffuser_desc = df.loc[df['Diffuser / Louvre Code'].str.strip() == diffuser_code, 'Diffuser / Louvre Description'].values
+        wiring_desc = df.loc[df['Wiring Code'].str.strip() == wiring_code, 'Wiring Description'].values
+        driver_desc = df.loc[df['Driver Code'].str.strip() == driver_code, 'Driver Description'].values
+        cri_desc = df.loc[df['CRI Code'].str.strip() == cri_code, 'CRI Description'].values
+        cct_desc = df.loc[df['CCT/Colour Code'].str.strip() == cct_code, 'CCT/Colour Description'].values
+
+        result.append({"Type": "Diffuser / Louvre", "Value": diffuser_desc[0] if len(diffuser_desc) else "Unknown"})
+        result.append({"Type": "Wiring", "Value": wiring_desc[0] if len(wiring_desc) else "Unknown"})
+        result.append({"Type": "Driver", "Value": driver_desc[0] if len(driver_desc) else "Unknown"})
+        result.append({"Type": "CRI", "Value": cri_desc[0] if len(cri_desc) else "Unknown"})
+        result.append({"Type": "CCT", "Value": cct_desc[0] if len(cct_desc) else "Unknown"})
+
+    return result
 
 # === MAIN DISPLAY ===
 if st.session_state['ies_files']:
@@ -174,15 +188,15 @@ if st.session_state['ies_files']:
     scaled_lm_per_watt = round(scaled_lumens / input_watts, 1) if input_watts > 0 else 0
     scaled_lm_per_m = round(scaled_lumens / length_m, 1) if length_m > 0 else 0
 
-    # === LUMCAT MAPPED TABLE ===
+    # === PARSE LUMCAT ===
     lumcat_code = next((line.split(']')[-1].strip() for line in header_lines if "[LUMCAT]" in line), None)
-
     if lumcat_code:
-        st.subheader("🔍 LUMCAT Code Mapping")
-        lumcat_table = parse_lumcat_code(lumcat_code)
-        st.table(lumcat_table)
+        parsed_lumcat = parse_lumcat(lumcat_code, st.session_state['matrix_lookup'])
 
-    # === PHOTOMETRIC PARAMETERS + METADATA ===
+        with st.expander("🔍 Lookup Table", expanded=False):
+            lookup_df = pd.DataFrame(parsed_lumcat)
+            st.table(lookup_df)
+
     with st.expander("📏 Photometric Parameters + Metadata", expanded=False):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
         st.markdown("#### IES Metadata")
@@ -207,7 +221,6 @@ if st.session_state['ies_files']:
         photometric_df = pd.DataFrame(photometric_data)
         st.table(photometric_df)
 
-    # === BASELINE + SCALED VALUES ===
     with st.expander("✨ Computed Baseline + Scaled Values", expanded=False):
         baseline_data = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}", "Scaled": f"{scaled_lumens:.1f}"},
@@ -221,4 +234,4 @@ else:
     st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 2.1e - LED Chip Scaling + LUMCAT Mapping Table")
+st.caption("Version 2.1f - Fixed LUMCAT Lookup, Clean UI, Advanced Sidebar Order")
