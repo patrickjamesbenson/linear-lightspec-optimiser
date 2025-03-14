@@ -90,5 +90,28 @@ if uploaded_file:
 
     st.info("All displayed computed values are generated dynamically based on the uploaded IES file and serve as a verification baseline.")
 
+    # === DISPLAY REMAINING FIELDS ===
+    st.markdown("## 📐 Photometric Parameters")
+    param_labels = [
+        "Number of Lamps", "Lumens per Lamp", "Candela Multiplier",
+        "Vertical Angles", "Horizontal Angles", "Photometric Type",
+        "Units Type", "Width (m)", "Length (m)", "Height (m)",
+        "Ballast Factor", "Future Use", "Input Watts"
+    ]
+
+    photometric_data = {label: value for label, value in zip(param_labels, photometric_params)}
+    st.table(pd.DataFrame.from_dict(photometric_data, orient='index', columns=['Value']))
+
+    st.markdown("## 📈 Vertical Angles")
+    st.write(" ".join([f"{angle:.2f}" for angle in vertical_angles]))
+
+    st.markdown("## 📈 Horizontal Angles")
+    st.write(" ".join([f"{angle:.2f}" for angle in horizontal_angles]))
+
+    st.markdown("## 💡 Candela Values")
+    for idx, row in enumerate(candela_matrix):
+        st.write(f"Horizontal Angle {horizontal_angles[idx]:.2f}°")
+        st.write(" ".join([f"{cd:.1f}" for cd in row]))
+
 else:
     st.warning("Please upload an IES file to proceed.")
