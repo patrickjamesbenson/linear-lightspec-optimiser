@@ -14,24 +14,6 @@ if 'ies_files' not in st.session_state:
 if 'matrix_version' not in st.session_state:
     st.session_state['matrix_version'] = []
 
-if 'matrix_lookup' not in st.session_state:
-    st.session_state['matrix_lookup'] = pd.DataFrame({
-        'Option Code': ['NS'],
-        'Option Description': ['No Special Option'],
-        'Diffuser Code': ['AA'],
-        'Diffuser Description': ['None'],
-        'Driver Code': ['AA'],
-        'Driver Description': ['Standard Fixed Output Driver'],
-        'Wiring Code': ['A'],
-        'Wiring Description': ['Hardwired'],
-        'Dimensions Code': ['AA'],
-        'Dimensions Description': ['265mm x 265mm'],
-        'CRI Code': ['80'],
-        'CRI Description': ['80'],
-        'CCT Code': ['27'],
-        'CCT Description': ['2700K']
-    })
-
 # === FILE UPLOAD ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
@@ -99,37 +81,75 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
+# === PLACEHOLDER LOOKUP MATRIX ===
+def get_matrix_lookup():
+    if 'matrix_lookup' in st.session_state:
+        return st.session_state['matrix_lookup']
+    return pd.DataFrame({
+        'Option Code': ['NS'],
+        'Option Description': ['No Special Option'],
+        'Diffuser / Louvre Code': ['AA'],
+        'Diffuser / Louvre Description': ['None'],
+        'Driver Code': ['AA'],
+        'Wiring Code': ['A'],
+        'Wiring Description': ['Hardwired'],
+        'Driver Description': ['Standard Fixed Output Driver'],
+        'Dimensions Code': ['AA'],
+        'Dimensions Description': ['265mm x 265mm'],
+        'CRI Code': ['80'],
+        'CRI Description': ['80'],
+        'CCT/Colour Code': ['27'],
+        'CCT/Colour Description': ['2700K']
+    })
+
+# === MATRIX FILE MANAGEMENT ===
 def download_matrix_template():
-    return st.session_state['matrix_lookup']
+    return get_matrix_lookup()
 
-# === SIDEBAR MAINTENANCE ===
-with st.sidebar.expander("⚙️ Maintenance", expanded=False):
-    st.caption("✅ Download current version first. Then adjust and re-upload.")
+st.sidebar.markdown("### Matrix Download/Upload")
+st.sidebar.caption("✅ Download current version first. Edit carefully and upload the same format.")
 
+if st.sidebar.button("Download Current Matrix"):
     csv = download_matrix_template().to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="Download Current Matrix CSV",
+    st.sidebar.download_button(
+        label="Download Matrix CSV",
         data=csv,
         file_name='matrix_current.csv',
         mime='text/csv'
     )
 
-    uploaded_matrix = st.file_uploader("Upload Updated Matrix CSV", type=["csv"], key="matrix_upload")
-    if uploaded_matrix:
-        df_new_matrix = pd.read_csv(uploaded_matrix)
-        required_columns = [
-            'Option Code', 'Option Description', 'Diffuser Code', 'Diffuser Description',
-            'Driver Code', 'Driver Description', 'Wiring Code', 'Wiring Description',
-            'Dimensions Code', 'Dimensions Description', 'CRI Code', 'CRI Description',
-            'CCT Code', 'CCT Description'
-        ]
-        if all(col in df_new_matrix.columns for col in required_columns):
-            st.session_state['matrix_lookup'] = df_new_matrix
-            version_time = int(time.time())
-            st.session_state['matrix_version'].append(version_time)
-            st.success(f"Matrix updated! Version: {version_time}")
-        else:
-            st.error("Upload failed. Check column headers.")
+uploaded_matrix = st.sidebar.file_uploader("Upload Updated Matrix CSV", type=["csv"])
+
+if uploaded_matrix:
+    df_new_matrix = pd.read_csv(uploaded_matrix)
+    required_columns = [
+        'Option Code',
+        'Option Description',
+        'Diffuser / Louvre Code',
+        'Diffuser / Louvre Description',
+        'Driver Code',
+        'Wiring Code',
+        'Wiring Description',
+        'Driver Description',
+        'Dimensions Code',
+        'Dimensions Description',
+        'CRI Code',
+        'CRI Description',
+        'CCT/Colour Code',
+        'CCT/Colour Description'
+    ]
+
+    if all(col in df_new_matrix.columns for col in required_columns):
+        st.session_state['matrix_lookup'] = df_new_matrix
+        version_time = int(time.time())
+        st.session_state['matrix_version'].append(version_time)
+        st.sidebar.success(f"Matrix updated successfully! Version: {version_time}")
+    else:
+        st.sidebar.error("Matrix upload failed. Please use the correct CSV format.")
+
+if st.sidebar.button("Rollback to Previous Version") and len(st.session_state['matrix_version']) > 1:
+    st.session_state['matrix_version'].pop()
+    st.sidebar.info(f"Rolled back to version: {st.session_state['matrix_version'][-1]}")
 
 # === PROCESS AND DISPLAY FILE ===
 if st.session_state['ies_files']:
@@ -144,52 +164,45 @@ if st.session_state['ies_files']:
     calculated_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     calculated_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    st.subheader("✨ Computed Baseline Data")
-    baseline_data = [
-        {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}"},
-        {"Description": "Efficacy (lm/W)", "Value": f"{calculated_lm_per_watt:.1f}"},
-        {"Description": "Lumens per Meter", "Value": f"{calculated_lm_per_m:.1f}"}
-    ]
-    baseline_df = pd.DataFrame(baseline_data)
-    st.table(baseline_df)
+    # === DISPLAY COMPUTED BASELINE ===
+    with st.expander("✨ Computed Baseline Data", expanded=False):
+        baseline_data = [
+            {"Description": "Total Lumens", "Value": calculated_lumens},
+            {"Description": "Efficacy (lm/W)", "Value": calculated_lm_per_watt},
+            {"Description": "Lumens per Meter", "Value": calculated_lm_per_m},
+        ]
+        baseline_df = pd.DataFrame(baseline_data)
+        st.table(baseline_df.style.format({"Value": "{:.1f}"}))
 
-    st.subheader("📄 IES Metadata")
-    meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
-    ies_df = pd.DataFrame(list(meta_dict.items()), columns=["Field", "Value"])
-    st.table(ies_df)
+    # === DISPLAY IES METADATA ===
+    with st.expander("📄 IES Metadata", expanded=False):
+        meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
+        st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-    st.subheader("📐 Photometric Parameters")
-    photometric_data = [
-        {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]}"},
-        {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]}"},
-        {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]}"},
-        {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]}"},
-        {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]}"},
-        {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]}"},
-        {"Parameter": "Units Type", "Details": f"{photometric_params[6]}"},
-        {"Parameter": "Width", "Details": f"{photometric_params[7]}"},
-        {"Parameter": "Length", "Details": f"{photometric_params[8]}"},
-        {"Parameter": "Height", "Details": f"{photometric_params[9]}"},
-        {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]}"},
-        {"Parameter": "Future Use", "Details": f"{photometric_params[11]}"},
-        {"Parameter": "Input Watts", "Details": f"{photometric_params[12]}"}
-    ]
-    photometric_df = pd.DataFrame(photometric_data)
-    st.table(photometric_df)
+    # === DISPLAY PHOTOMETRIC PARAMETERS ===
+    with st.expander("📐 Photometric Parameters", expanded=False):
+        photometric_data = [
+            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
+            {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm (absolute photometry)" if photometric_params[1] < 0 else f"{photometric_params[1]} lm"},
+            {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f} (multiplier applied to candela values)"},
+            {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]} vertical angles measured"},
+            {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]} horizontal planes"},
+            {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]} (Type C)" if photometric_params[5] == 1 else f"{photometric_params[5]} (Other)"},
+            {"Parameter": "Units Type", "Details": f"{photometric_params[6]} (Meters)" if photometric_params[6] == 2 else f"{photometric_params[6]} (Feet)"},
+            {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
+            {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
+            {"Parameter": "Height", "Details": f"{photometric_params[9]:.2f} m"},
+            {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]:.1f}"},
+            {"Parameter": "Future Use", "Details": f"{photometric_params[11]}"},
+            {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"}
+        ]
+        photometric_df = pd.DataFrame(photometric_data)
+        st.table(photometric_df)
 
-    st.subheader("📚 Lookup Table")
-    lookup = st.session_state['matrix_lookup']
-
-    lookup_display = [
-        {"Type": "Option", "Value": lookup['Option Description'][0]},
-        {"Type": "Diffuser", "Value": lookup['Diffuser Description'][0]},
-        {"Type": "Wiring", "Value": lookup['Wiring Description'][0]},
-        {"Type": "Driver", "Value": lookup['Driver Description'][0]},
-        {"Type": "CRI", "Value": lookup['CRI Description'][0]},
-        {"Type": "CCT", "Value": lookup['CCT Description'][0]},
-    ]
-    lookup_df = pd.DataFrame(lookup_display)
-    st.table(lookup_df)
+    # === DISPLAY LOOKUP TABLE ===
+    with st.expander("🔎 Lookup Table", expanded=False):
+        lookup_df = get_matrix_lookup()
+        st.table(lookup_df)
 
 else:
     st.warning("Please upload an IES file to proceed.")
