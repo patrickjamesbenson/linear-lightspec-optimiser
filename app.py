@@ -90,28 +90,37 @@ if uploaded_file:
 
     st.info("All displayed computed values are generated dynamically based on the uploaded IES file and serve as a verification baseline.")
 
-    # === DISPLAY REMAINING FIELDS ===
+    # === DISPLAY PHOTOMETRIC PARAMETERS ===
     st.markdown("## 📐 Photometric Parameters")
     param_labels = [
         "Number of Lamps", "Lumens per Lamp", "Candela Multiplier",
-        "Vertical Angles", "Horizontal Angles", "Photometric Type",
+        "Vertical Angles Count", "Horizontal Angles Count", "Photometric Type",
         "Units Type", "Width (m)", "Length (m)", "Height (m)",
         "Ballast Factor", "Future Use", "Input Watts"
     ]
 
-    photometric_data = {label: value for label, value in zip(param_labels, photometric_params)}
-    st.table(pd.DataFrame.from_dict(photometric_data, orient='index', columns=['Value']))
+    param_comments = [
+        "Total number of lamps used in the test.",
+        "Lumens per lamp (negative means absolute photometry).",
+        "Multiplier applied to candela values.",
+        "Count of vertical angles measured.",
+        "Count of horizontal angles measured.",
+        "Photometric type (1=c, 2=b, 3=a).",
+        "Units type (1=feet, 2=meters).",
+        "Luminaire width (meters).",
+        "Luminaire length (meters).",
+        "Luminaire height (meters).",
+        "Ballast factor used in calculation.",
+        "Future use (typically 1).",
+        "Input power in watts."
+    ]
 
-    st.markdown("## 📈 Vertical Angles")
-    st.write(" ".join([f"{angle:.2f}" for angle in vertical_angles]))
+    photometric_data = []
+    for label, value, comment in zip(param_labels, photometric_params, param_comments):
+        photometric_data.append({"Parameter": label, "Value": f"{value:.1f}", "Comment": comment})
 
-    st.markdown("## 📈 Horizontal Angles")
-    st.write(" ".join([f"{angle:.2f}" for angle in horizontal_angles]))
-
-    st.markdown("## 💡 Candela Values")
-    for idx, row in enumerate(candela_matrix):
-        st.write(f"Horizontal Angle {horizontal_angles[idx]:.2f}°")
-        st.write(" ".join([f"{cd:.1f}" for cd in row]))
+    photometric_df = pd.DataFrame(photometric_data)
+    st.table(photometric_df)
 
 else:
     st.warning("Please upload an IES file to proceed.")
