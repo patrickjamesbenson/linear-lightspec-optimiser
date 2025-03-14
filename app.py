@@ -99,7 +99,7 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
-# === MAINTENANCE SECTION ===
+# === SIDEBAR MAINTENANCE SECTION ===
 with st.sidebar.expander("⚙️ Maintenance", expanded=False):
     pwd = st.text_input("Enter Author DOB (DDMM) to Unlock", type="password")
     if pwd == "YOURDOB":  # Replace 'YOURDOB' with actual author DDMM
@@ -135,7 +135,7 @@ with st.sidebar.expander("⚙️ Maintenance", expanded=False):
     else:
         st.info("PWD Hint - Author DOB DDMM")
 
-# === DISPLAY SECTION ===
+# === MAIN DISPLAY SECTION ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
 
@@ -148,39 +148,68 @@ if st.session_state['ies_files']:
     calculated_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     calculated_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
+    # Computed Baseline Data
     st.markdown("### ✨ Computed Baseline Data")
     baseline_data = [
-        {"Description": "Total Lumens", "Value": calculated_lumens},
-        {"Description": "Efficacy (lm/W)", "Value": calculated_lm_per_watt},
-        {"Description": "Lumens per Meter", "Value": calculated_lm_per_m},
+        {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}"},
+        {"Description": "Efficacy (lm/W)", "Value": f"{calculated_lm_per_watt:.1f}"},
+        {"Description": "Lumens per Meter", "Value": f"{calculated_lm_per_m:.1f}"},
     ]
     st.table(pd.DataFrame(baseline_data))
 
+    # IES Metadata
     st.markdown("### 📄 IES Metadata")
     meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
     st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
+    # Photometric Parameters
     st.markdown("### 📐 Photometric Parameters")
     photometric_data = [
         {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
         {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm (absolute photometry)" if photometric_params[1] < 0 else f"{photometric_params[1]} lm"},
-        {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f} (multiplier applied to candela values)"},
-        {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]} vertical angles measured"},
-        {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]} horizontal planes"},
+        {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f}"},
+        {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]}"},
+        {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]}"},
         {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]} (Type C)" if photometric_params[5] == 1 else f"{photometric_params[5]} (Other)"},
         {"Parameter": "Units Type", "Details": f"{photometric_params[6]} (Meters)" if photometric_params[6] == 2 else f"{photometric_params[6]} (Feet)"},
         {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
         {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
         {"Parameter": "Height", "Details": f"{photometric_params[9]:.2f} m"},
         {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]:.1f}"},
-        {"Parameter": "Future Use", "Details": f"{photometric_params[11]} (reserved)"},
+        {"Parameter": "Future Use", "Details": f"{photometric_params[11]}"},
         {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"}
     ]
     st.table(pd.DataFrame(photometric_data))
 
-    st.markdown("### 🔎 Lookup Table Description")
+    # Lookup Tables (Individual Tables)
     lookup_table = st.session_state['matrix_lookup']
-    st.dataframe(lookup_table)
+
+    st.markdown("### 🔎 Lookup Tables")
+
+    # Diffuser Table
+    st.markdown("#### Diffuser")
+    diffuser_table = lookup_table[['Diffuser Code', 'Diffuser Description']].drop_duplicates()
+    st.table(diffuser_table)
+
+    # Wiring Table
+    st.markdown("#### Wiring")
+    wiring_table = lookup_table[['Wiring Code', 'Wiring Description']].drop_duplicates()
+    st.table(wiring_table)
+
+    # Driver Table
+    st.markdown("#### Driver")
+    driver_table = lookup_table[['Driver Code', 'Driver Description']].drop_duplicates()
+    st.table(driver_table)
+
+    # CRI Table
+    st.markdown("#### CRI")
+    cri_table = lookup_table[['CRI Code', 'CRI Description']].drop_duplicates()
+    st.table(cri_table)
+
+    # CCT Table
+    st.markdown("#### CCT")
+    cct_table = lookup_table[['CCT Code', 'CCT Description']].drop_duplicates()
+    st.table(cct_table)
 
 else:
     st.warning("Please upload an IES file to proceed.")
