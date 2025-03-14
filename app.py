@@ -7,7 +7,7 @@ import time
 st.set_page_config(page_title="IES Metadata & Baseline Lumen Calculator", layout="wide")
 st.title("IES Metadata & Computed Baseline Display")
 
-# === SESSION STATE INITIALISATION ===
+# === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
     st.session_state['ies_files'] = []
 
@@ -119,4 +119,77 @@ if st.sidebar.button("Download Matrix Template"):
         label="Download Template CSV",
         data=csv,
         file_name='matrix_template.csv',
-        mime
+        mime='text/csv'
+    )
+
+uploaded_matrix = st.sidebar.file_uploader("Upload Updated Matrix CSV", type=["csv"])
+
+if uploaded_matrix:
+    st.session_state['matrix_lookup'] = pd.read_csv(uploaded_matrix)
+    version_time = int(time.time())
+    st.session_state['matrix_version'].append(version_time)
+    st.sidebar.success(f"Matrix updated successfully! Version: {version_time}")
+
+# === PROCESS AND DISPLAY FILE ===
+if st.session_state['ies_files']:
+    ies_file = st.session_state['ies_files'][0]
+
+    header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(ies_file['content'])
+
+    calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
+    input_watts = photometric_params[12]
+    length_m = photometric_params[8]
+
+    calculated_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
+    calculated_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
+
+    # === DISPLAY COMPUTED BASELINE ===
+    with st.expander("✨ Computed Baseline Data", expanded=False):
+        baseline_data = [
+            {"Description": "Total Lumens", "Value": calculated_lumens},
+            {"Description": "Efficacy (lm/W)", "Value": calculated_lm_per_watt},
+            {"Description": "Lumens per Meter", "Value": calculated_lm_per_m},
+        ]
+        baseline_df = pd.DataFrame(baseline_data)
+        st.table(baseline_df.style.format({"Value": "{:.1f}"}))
+
+    # === DISPLAY IES METADATA ===
+    with st.expander("📄 IES Metadata", expanded=False):
+        meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
+        st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
+
+    # === DISPLAY PHOTOMETRIC PARAMETERS ===
+    with st.expander("📐 Photometric Parameters", expanded=False):
+        photometric_data = [
+            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
+            {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm (absolute photometry)" if photometric_params[1] < 0 else f"{photometric_params[1]} lm"},
+            {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f} (multiplier applied to candela values)"},
+            {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]} vertical angles measured"},
+            {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]} horizontal planes"},
+            {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]} (Type C)" if photometric_params[5] == 1 else f"{photometric_params[5]} (Other)"},
+            {"Parameter": "Units Type", "Details": f"{photometric_params[6]} (Meters)" if photometric_params[6] == 2 else f"{photometric_params[6]} (Feet)"},
+            {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
+            {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
+            {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]:.1f}"},
+            {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"},
+        ]
+        photometric_df = pd.DataFrame(photometric_data)
+        st.table(photometric_df)
+
+    # === DISPLAY MATRIX LOOKUP DETAILS ===
+    matrix_info = get_matrix_lookup()
+
+    with st.expander("🔎 Matrix Details", expanded=False):
+        matrix_data = [
+            {"Description": "Option", "Value": matrix_info['Option']},
+            {"Description": "Diffuser", "Value": matrix_info['Diffuser']},
+            {"Description": "Driver", "Value": matrix_info['Driver']},
+            {"Description": "Wiring", "Value": matrix_info['Wiring']},
+            {"Description": "CRI", "Value": matrix_info['CRI']},
+            {"Description": "CCT", "Value": matrix_info['CCT']}
+        ]
+        matrix_df = pd.DataFrame(matrix_data)
+        st.table(matrix_df)
+
+else:
+    st.warning("Please upload an IES file to proceed.")
