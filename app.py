@@ -25,7 +25,7 @@ with st.sidebar:
             st.session_state['matrix_lookup'] = pd.read_csv(matrix_file)
             st.success(f"Matrix Uploaded: {matrix_file.name}")
 
-    # === ADVANCED SETTINGS ===
+    # === ADVANCED LED PARAMETERS ===
     with st.expander("Customisation", expanded=False):
         st.markdown("### Advanced LED Parameters")
         led_pitch_set = st.number_input("LED Pitch Set (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
@@ -45,7 +45,7 @@ with st.sidebar:
             if not comment:
                 st.error("Comment is mandatory to proceed with changes!")
 
-# === MAIN PAGE ===
+# === MAIN DISPLAY ===
 st.subheader("📄 IES Metadata")
 uploaded_ies = st.file_uploader("Upload your IES file", type=["ies"])
 if uploaded_ies:
@@ -82,7 +82,7 @@ def compute_lumen_data(photometric_params):
     lumens_per_m = round(total_lumens / photometric_params[8], 1) if photometric_params[8] > 0 else 0
     return total_lumens, input_watts, efficacy_lm_per_w, lumens_per_m
 
-# === DISPLAY IES METADATA + PHOTOMETRIC PARAMETERS + COMPUTED BASELINE ===
+# === DISPLAY METADATA, PARAMETERS, BASELINE ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
     header_lines, photometric_params = parse_ies_file(ies_file['content'])
@@ -118,4 +118,4 @@ if st.session_state['ies_files']:
     st.table(baseline_df.style.format({"Value": "{:.1f}"}))
 
 # === FOOTER ===
-st.caption("Version 2.1b - Sidebar and Main Page Structural Fixes")
+st.caption("Version 2.1 - Reverted to V2 Layout + Sidebar Improvements")
