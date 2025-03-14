@@ -9,30 +9,30 @@ st.title("Linear Lightspec Optimiser")
 # === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
     st.session_state['ies_files'] = []
-if 'matrix_version' not in st.session_state:
-    st.session_state['matrix_version'] = []
 if 'matrix_lookup' not in st.session_state:
     st.session_state['matrix_lookup'] = pd.DataFrame()
 if 'advanced_unlocked' not in st.session_state:
     st.session_state['advanced_unlocked'] = False
 
-# === SIDEBAR: MATRIX UPLOAD / ADVANCED SETTINGS ===
+# === SIDEBAR ===
 with st.sidebar:
-    st.subheader("📁 Matrix Upload / Download")
-    matrix_file = st.file_uploader("Upload Matrix CSV", type=["csv"])
-    if matrix_file:
-        st.session_state['matrix_version'] = matrix_file.name
-        st.success(f"Uploaded: {matrix_file.name}")
-
     st.subheader("⚙️ Advanced Settings")
+
     with st.expander("Customisation", expanded=False):
-        st.write("Configure advanced LED parameters and component sizes.")
-        
-        # LED Pitch Settings
+        # MATRIX UPLOAD / DOWNLOAD
+        st.markdown("### 📁 Matrix Upload / Download")
+        matrix_file = st.file_uploader("Upload Matrix CSV", type=["csv"])
+        if matrix_file:
+            st.session_state['matrix_lookup'] = pd.read_csv(matrix_file)
+            st.success(f"Matrix Uploaded: {matrix_file.name}")
+
+        # ADVANCED LED PARAMETERS
+        st.markdown("### Advanced LED Parameters")
         led_pitch_set = st.number_input("LED Pitch Set (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
         leds_per_pitch_set = st.number_input("LEDs per Pitch Set", min_value=1, max_value=12, value=6)
 
-        # Component Lengths
+        # COMPONENT LENGTHS
+        st.markdown("### Component Lengths")
         end_plate_thickness = st.number_input("End Plate Thickness (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1)
         pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
         spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
@@ -42,13 +42,12 @@ with st.sidebar:
             st.session_state['advanced_unlocked'] = True
             st.warning("Super Advanced Users Only: Changes require mandatory comments!")
 
-        # Mandatory Comment if Unlocked
         if st.session_state['advanced_unlocked']:
             comment = st.text_area("Mandatory Comment", placeholder="Explain why you are making changes")
             if not comment:
                 st.error("Comment is mandatory to proceed with changes!")
 
-# === MAIN PAGE: IES METADATA / COMPUTED BASELINE DISPLAY ===
+# === MAIN PAGE ===
 st.subheader("📄 IES Metadata")
 uploaded_ies = st.file_uploader("Upload your IES file", type=["ies"])
 if uploaded_ies:
@@ -56,7 +55,7 @@ if uploaded_ies:
     st.session_state['ies_files'] = [{'name': uploaded_ies.name, 'content': file_content}]
     st.success(f"{uploaded_ies.name} uploaded!")
 
-# Function to Parse IES File
+# === FUNCTIONS ===
 def parse_ies_file(file_content):
     lines = file_content.splitlines()
     header_lines = []
@@ -76,7 +75,6 @@ def parse_ies_file(file_content):
     photometric_params = [float(x) if '.' in x or 'e' in x.lower() else int(x) for x in photometric_raw]
     return header_lines, photometric_params
 
-# Function to Compute Lumen Data
 def compute_lumen_data(photometric_params):
     if len(photometric_params) < 13:
         return None, None, None, None
@@ -86,7 +84,7 @@ def compute_lumen_data(photometric_params):
     lumens_per_m = round(total_lumens / photometric_params[8], 1) if photometric_params[8] > 0 else 0
     return total_lumens, input_watts, efficacy_lm_per_w, lumens_per_m
 
-# Process Uploaded IES File
+# === DISPLAY PHOTOMETRIC + COMPUTED BASELINE ===
 if st.session_state['ies_files']:
     st.subheader("📏 Photometric Parameters")
     ies_file = st.session_state['ies_files'][0]
@@ -103,3 +101,6 @@ if st.session_state['ies_files']:
     ]
     baseline_df = pd.DataFrame(baseline_data)
     st.table(baseline_df.style.format({"Value": "{:.1f}"}))
+
+# === FOOTER ===
+st.caption("Version 2.1a - Sidebar Customisation, IES Metadata, Photometric & Baseline Display.")
