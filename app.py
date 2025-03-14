@@ -97,15 +97,21 @@ if st.session_state['ies_files']:
 
     calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
     input_watts = photometric_params[12]
+    length_m = photometric_params[8]
+
     calculated_lm_per_watt = round(calculated_lumens / input_watts, 2) if input_watts > 0 else 0
+    calculated_lm_per_m = round(calculated_lumens / length_m, 2) if length_m > 0 else 0
 
     # === DISPLAY COMPUTED BASELINE ===
-    st.markdown("""
-        <div style='font-size: 0.75rem;'>
-            <strong>Total Lumens (lm):</strong> {0}<br>
-            <strong>Lumens per Watt (lm/W):</strong> {1}
-        </div>
-    """.format(calculated_lumens, calculated_lm_per_watt), unsafe_allow_html=True)
+    with st.expander("✨ Computed Baseline Data", expanded=False):
+        baseline_data = [
+            {"Description": "Total Lumens", "Value": calculated_lumens},
+            {"Description": "Efficacy (lm/W)", "Value": calculated_lm_per_watt},
+            {"Description": "Lumens per Meter", "Value": calculated_lm_per_m},
+            {"Description": "Total System Efficacy", "Value": calculated_lm_per_watt}
+        ]
+        baseline_df = pd.DataFrame(baseline_data)
+        st.table(baseline_df)
 
     # === DISPLAY IES METADATA ===
     with st.expander("📄 IES Metadata", expanded=False):
