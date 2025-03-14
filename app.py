@@ -27,16 +27,12 @@ with st.sidebar:
         matrix_file = st.file_uploader("Upload Matrix CSV", type=["csv"])
         if matrix_file:
             df_new_matrix = pd.read_csv(matrix_file)
-
-            # ✅ HEADERS UPDATED TO MATCH YOUR CSV FORMAT
             required_columns = [
-                'Option Code', 'Option Description',
-                'Diffuser / Louvre Code', 'Diffuser / Louvre Description',
-                'Driver Code', 'Wiring Code', 'Wiring Description',
-                'Driver Description', 'Dimensions Code', 'Dimensions Description',
-                'CRI Code', 'CRI Description', 'CCT/Colour Code', 'CCT/Colour Description'
+                'Option Code', 'Option Description', 'Diffuser Code', 'Diffuser Description',
+                'Driver Code', 'Driver Description', 'Wiring Code', 'Wiring Description',
+                'Dimensions Code', 'Dimensions Description', 'CRI Code', 'CRI Description',
+                'CCT Code', 'CCT Description'
             ]
-
             if all(col in df_new_matrix.columns for col in required_columns):
                 st.session_state['matrix_lookup'] = df_new_matrix
                 version_time = int(time.time())
@@ -141,13 +137,13 @@ if st.session_state['ies_files']:
     calculated_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     calculated_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    # === IES Metadata ===
-    with st.expander("📄 IES Metadata", expanded=False):
+    # === IES Metadata + Photometric Parameters ===
+    with st.expander("📄 IES Metadata & Photometric Parameters", expanded=False):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
+        st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-    # === Photometric Parameters ===
-    with st.expander("📐 Photometric Parameters", expanded=False):
+        st.markdown("#### Photometric Parameters")
         photometric_data = [
             {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
             {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm"},
@@ -166,18 +162,32 @@ if st.session_state['ies_files']:
         photometric_df = pd.DataFrame(photometric_data)
         st.table(photometric_df)
 
-    # === Computed Baseline ===
-    with st.expander("✨ Computed Baseline Data", expanded=False):
-        baseline_data = [
-            {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}"},
-            {"Description": "Efficacy (lm/W)", "Value": f"{calculated_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "Value": f"{calculated_lm_per_m:.1f}"}
-        ]
-        baseline_df = pd.DataFrame(baseline_data)
-        st.table(baseline_df)
+    # === Computed Baseline + LED Chip Scaling ===
+    with st.expander("✨ Computed Baseline Data + LED Chip Scaling", expanded=False):
+        st.markdown("#### Base Values")
+        st.metric(label="Total Lumens", value=f"{calculated_lumens:.1f}")
+        st.metric(label="Efficacy (lm/W)", value=f"{calculated_lm_per_watt:.1f}")
+        st.metric(label="Lumens per Meter", value=f"{calculated_lm_per_m:.1f}")
+
+        st.divider()
+
+        st.markdown("#### LED Chip Efficiency Scaling")
+        efficiency_change = st.number_input("LED Chip Scaling (%)", min_value=-50.0, max_value=50.0, value=0.0, step=0.1)
+        scaled_lumens = round(calculated_lumens * (1 + efficiency_change / 100), 1)
+        scaled_lm_per_watt = round(scaled_lumens / input_watts, 1) if input_watts > 0 else 0
+        scaled_lm_per_m = round(scaled_lumens / length_m, 1) if length_m > 0 else 0
+
+        st.metric(label="Scaled Lumens", value=f"{scaled_lumens:.1f}")
+        st.metric(label="Scaled Efficacy (lm/W)", value=f"{scaled_lm_per_watt:.1f}")
+        st.metric(label="Scaled Lumens per Meter", value=f"{scaled_lm_per_m:.1f}")
+
+        if efficiency_change != 0.0:
+            comment = st.text_area("Mandatory Comment", placeholder="Explain the reason for scaling...")
+            if not comment:
+                st.error("Comment is mandatory when scaling is applied!")
 
 else:
     st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 2.1c - Matrix Headers Updated to Match Spreadsheet")
+st.caption("Version 2.1d - Advanced LED Customisation + Computed Scaling Restored")
