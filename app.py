@@ -9,7 +9,6 @@ st.title("IES Metadata & Computed Baseline Display")
 # === SESSION STATE INITIALISATION ===
 if 'ies_files' not in st.session_state:
     st.session_state['ies_files'] = []
-    st.session_state['selected_file_index'] = 0
 
 # === FILE UPLOAD ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
@@ -78,66 +77,49 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 2)
 
-# === SELECT FILE TO DISPLAY ===
+# === PROCESS AND DISPLAY EACH FILE ===
 if st.session_state['ies_files']:
-    file_names = [f["name"] for f in st.session_state['ies_files']]
+    for idx, ies_file in enumerate(st.session_state['ies_files']):
+        st.markdown(f"### 📂 File {idx + 1}: {ies_file['name']}")
 
-    cols = st.columns([8, 2])
-    selected = cols[0].radio("Select an IES file to view its baseline calculation:", range(len(file_names)),
-                             format_func=lambda x: file_names[x],
-                             index=st.session_state['selected_file_index'])
+        header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(ies_file['content'])
 
-    # Delete button
-    if cols[1].button("Delete Selected File"):
-        del st.session_state['ies_files'][selected]
-        if st.session_state['selected_file_index'] >= len(st.session_state['ies_files']):
-            st.session_state['selected_file_index'] = max(0, len(st.session_state['ies_files']) - 1)
-        st.experimental_rerun()
+        calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
+        input_watts = photometric_params[12]
+        calculated_lm_per_watt = round(calculated_lumens / input_watts, 2) if input_watts > 0 else 0
 
-    # Update selection
-    st.session_state['selected_file_index'] = selected
+        # === DISPLAY COMPUTED BASELINE ===
+        st.markdown("#### ✨ Computed Baseline Data")
+        st.metric(label="Calculated Total Lumens (lm)", value=f"{calculated_lumens}")
+        st.metric(label="Calculated Lumens per Watt (lm/W)", value=f"{calculated_lm_per_watt}")
+        st.info("All displayed computed values are generated dynamically based on the uploaded IES file and serve as a verification baseline.")
 
-    # === PROCESS SELECTED FILE ===
-    selected_file = st.session_state['ies_files'][selected]
-    header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(selected_file['content'])
+        # === DISPLAY IES METADATA ===
+        st.markdown("#### 📄 IES Metadata")
+        meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
 
-    calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
-    input_watts = photometric_params[12]
-    calculated_lm_per_watt = round(calculated_lumens / input_watts, 2) if input_watts > 0 else 0
+        st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-    # === DISPLAY COMPUTED BASELINE ===
-    st.markdown("## ✨ Computed Baseline Data")
-    st.metric(label="Calculated Total Lumens (lm)", value=f"{calculated_lumens}")
-    st.metric(label="Calculated Lumens per Watt (lm/W)", value=f"{calculated_lm_per_watt}")
-    st.info("All displayed computed values are generated dynamically based on the uploaded IES file and serve as a verification baseline.")
+        # === DISPLAY PHOTOMETRIC PARAMETERS ===
+        st.markdown("#### 📐 Photometric Parameters")
 
-    # === DISPLAY IES METADATA ===
-    st.markdown("## 📄 IES Metadata")
-    meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
+        photometric_data = [
+            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
+            {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm (absolute photometry)" if photometric_params[1] < 0 else f"{photometric_params[1]} lm"},
+            {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f} (multiplier applied to candela values)"},
+            {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]} vertical angles measured"},
+            {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]} horizontal planes"},
+            {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]} (Type C)" if photometric_params[5] == 1 else f"{photometric_params[5]} (Other)"},
+            {"Parameter": "Units Type", "Details": f"{photometric_params[6]} (Meters)" if photometric_params[6] == 2 else f"{photometric_params[6]} (Feet)"},
+            {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
+            {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
+            {"Parameter": "Height", "Details": f"{photometric_params[9]:.2f} m"},
+            {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]:.1f}"},
+            {"Parameter": "Future Use", "Details": f"{photometric_params[11]} (reserved)"},
+            {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"}
+        ]
 
-    st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
-
-    # === DISPLAY PHOTOMETRIC PARAMETERS ===
-    st.markdown("## 📐 Photometric Parameters")
-
-    photometric_data = [
-        {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
-        {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm (absolute photometry)" if photometric_params[1] < 0 else f"{photometric_params[1]} lm"},
-        {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f} (multiplier applied to candela values)"},
-        {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]} vertical angles measured"},
-        {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]} horizontal planes"},
-        {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]} (Type C)" if photometric_params[5] == 1 else f"{photometric_params[5]} (Other)"},
-        {"Parameter": "Units Type", "Details": f"{photometric_params[6]} (Meters)" if photometric_params[6] == 2 else f"{photometric_params[6]} (Feet)"},
-        {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
-        {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
-        {"Parameter": "Height", "Details": f"{photometric_params[9]:.2f} m"},
-        {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]:.1f}"},
-        {"Parameter": "Future Use", "Details": f"{photometric_params[11]} (reserved)"},
-        {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"}
-    ]
-
-    photometric_df = pd.DataFrame(photometric_data)
-    st.table(photometric_df)
-
+        photometric_df = pd.DataFrame(photometric_data)
+        st.table(photometric_df)
 else:
     st.warning("Please upload at least one IES file to proceed.")
