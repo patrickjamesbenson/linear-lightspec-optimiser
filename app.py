@@ -12,8 +12,6 @@ if 'ies_files' not in st.session_state:
     st.session_state['ies_files'] = []
 if 'matrix_lookup' not in st.session_state:
     st.session_state['matrix_lookup'] = pd.DataFrame()
-if 'matrix_version' not in st.session_state:
-    st.session_state['matrix_version'] = []
 if 'advanced_unlocked' not in st.session_state:
     st.session_state['advanced_unlocked'] = False
 
@@ -22,60 +20,67 @@ with st.sidebar:
     st.subheader("⚙️ Advanced Settings")
 
     with st.expander("Customisation", expanded=False):
+        # MATRIX UPLOAD / DOWNLOAD
         st.markdown("### 📁 Matrix Upload / Download")
+        st.caption("✅ Download current version first. Edit carefully. Keep column headers identical.")
 
-        matrix_file = st.file_uploader("Upload Matrix CSV", type=["csv"])
+        matrix_file = st.file_uploader("Upload Matrix CSV", type=["csv"], help="Upload your matrix CSV file using the exact column headers. This ensures the lookup works correctly.")
         if matrix_file:
             df_new_matrix = pd.read_csv(matrix_file)
+
             required_columns = [
-                'Option Code', 'Option Description', 'Diffuser Code', 'Diffuser Description',
-                'Driver Code', 'Driver Description', 'Wiring Code', 'Wiring Description',
-                'Dimensions Code', 'Dimensions Description', 'CRI Code', 'CRI Description',
-                'CCT Code', 'CCT Description'
+                'Option Code', 'Option Description',
+                'Diffuser / Louvre Code', 'Diffuser / Louvre Description',
+                'Driver Code', 'Wiring Code', 'Wiring Description',
+                'Driver Description', 'Dimensions Code', 'Dimensions Description',
+                'CRI Code', 'CRI Description', 'CCT/Colour Code', 'CCT/Colour Description'
             ]
+
             if all(col in df_new_matrix.columns for col in required_columns):
                 st.session_state['matrix_lookup'] = df_new_matrix
                 version_time = int(time.time())
-                st.session_state['matrix_version'].append(version_time)
-                st.success(f"Matrix uploaded! Version timestamp: {version_time}")
+                st.success(f"Matrix updated successfully! Version: {version_time}")
             else:
-                st.error("Matrix upload failed: Missing required columns.")
+                st.error("Matrix upload failed. Please ensure all required columns are present.")
 
-        if st.button("Download Current Matrix"):
-            current_matrix = st.session_state['matrix_lookup']
-            csv = current_matrix.to_csv(index=False).encode('utf-8')
-            st.download_button("Download Matrix CSV", csv, "matrix_current.csv", "text/csv")
-
+        # ADVANCED LED PARAMETERS
         st.markdown("### 🛠️ Advanced LED Parameters")
-        led_pitch_set = st.number_input("LED Pitch Set (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
-        leds_per_pitch_set = st.number_input("LEDs per Pitch Set", min_value=1, max_value=12, value=6)
+        led_pitch_set = st.number_input("LED Pitch Set (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1, help="Pitch between LED chipsets in mm.")
+        leds_per_pitch_set = st.number_input("LEDs per Pitch Set", min_value=1, max_value=12, value=6, help="Number of LEDs within each pitch set.")
 
-        st.markdown("### Component Lengths")
-        end_plate_thickness = st.number_input("End Plate Thickness (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1)
-        pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
-        spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
+        # COMPONENT LENGTHS
+        st.markdown("### 📏 Component Lengths")
+        end_plate_thickness = st.number_input("End Plate Thickness (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1, help="End plate thickness in mm.")
+        pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1, help="PIR sensor length in mm.")
+        spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1, help="Spitfire emergency module length in mm.")
 
+        # Unlock Advanced Mode
         if st.button("Unlock Advanced Settings"):
             st.session_state['advanced_unlocked'] = True
-            st.warning("Super Advanced Users Only: Mandatory comment required.")
+            st.warning("Super Advanced Users Only: Changes require mandatory comments!")
 
         if st.session_state['advanced_unlocked']:
-            comment = st.text_area("Mandatory Comment", placeholder="Explain why you are making changes")
+            comment = st.text_area("Mandatory Comment", placeholder="Explain why you are making changes", help="Document your reason for making advanced changes.")
             if not comment:
                 st.error("Comment is mandatory to proceed with changes!")
 
-# === FILE UPLOAD ON MAIN PAGE ===
-uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
-if uploaded_file:
-    file_content = uploaded_file.read().decode('utf-8')
-    st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
-    st.success(f"{uploaded_file.name} uploaded!")
+# === MAIN PAGE ===
 
-# === FUNCTIONS ===
+# === IES FILE UPLOAD ===
+st.subheader("📄 IES Metadata")
+uploaded_ies = st.file_uploader("Upload your IES file", type=["ies"], help="Upload an IES photometric file to extract luminaire data.")
+if uploaded_ies:
+    file_content = uploaded_ies.read().decode('utf-8')
+    st.session_state['ies_files'] = [{'name': uploaded_ies.name, 'content': file_content}]
+    st.success(f"{uploaded_ies.name} uploaded!")
+
+# === FUNCTION DEFINITIONS ===
 def parse_ies_file(file_content):
     lines = file_content.splitlines()
-    header_lines, data_lines = [], []
+    header_lines = []
+    data_lines = []
     reading_data = False
+
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("TILT"):
@@ -87,107 +92,54 @@ def parse_ies_file(file_content):
 
     photometric_raw = " ".join(data_lines[:2]).split()
     photometric_params = [float(x) if '.' in x or 'e' in x.lower() else int(x) for x in photometric_raw]
-    n_vert = int(photometric_params[3])
-    n_horz = int(photometric_params[4])
+    return header_lines, photometric_params
 
-    remaining_data = " ".join(data_lines[2:]).split()
-    vertical_angles = [float(x) for x in remaining_data[:n_vert]]
-    horizontal_angles = [float(x) for x in remaining_data[n_vert:n_vert + n_horz]]
+def compute_lumen_data(photometric_params, scaling_factor):
+    if len(photometric_params) < 13:
+        return None, None, None, None
+    base_lumens = photometric_params[12]
+    total_lumens = round(base_lumens * (1 + scaling_factor / 100), 1)
+    input_watts = round(photometric_params[10], 1)
+    efficacy_lm_per_w = round(total_lumens / input_watts, 1) if input_watts > 0 else 0
+    lumens_per_m = round(total_lumens / photometric_params[8], 1) if photometric_params[8] > 0 else 0
+    return total_lumens, input_watts, efficacy_lm_per_w, lumens_per_m
 
-    candela_values = remaining_data[n_vert + n_horz:]
-    candela_matrix = []
-    idx = 0
-    for _ in range(n_horz):
-        row = [float(candela_values[idx + i]) for i in range(n_vert)]
-        candela_matrix.append(row)
-        idx += n_vert
-
-    return header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix
-
-def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix, symmetry_factor=4):
-    vert_rad = np.radians(vertical_angles)
-    delta_vert = np.diff(vert_rad)
-    delta_vert = np.append(delta_vert, delta_vert[-1])
-
-    symmetry_range_rad = np.radians(horizontal_angles[-1] - horizontal_angles[0])
-    num_horz_segments = len(horizontal_angles)
-    uniform_delta_horz = symmetry_range_rad / num_horz_segments
-
-    total_flux = 0.0
-    for h_idx in range(num_horz_segments):
-        candela_row = candela_matrix[h_idx]
-        for v_idx, cd in enumerate(candela_row):
-            theta = vert_rad[v_idx]
-            d_theta = delta_vert[v_idx]
-            flux = cd * np.sin(theta) * d_theta * uniform_delta_horz
-            total_flux += flux
-
-    return round(total_flux * symmetry_factor, 1)
-
-# === MAIN DISPLAY ===
+# === DISPLAY PHOTOMETRIC PARAMETERS AND COMPUTED BASELINE ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
-    header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(
-        ies_file['content'])
+    header_lines, photometric_params = parse_ies_file(ies_file['content'])
 
-    calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
-    input_watts = photometric_params[12]
-    length_m = photometric_params[8]
+    st.subheader("📐 Photometric Parameters")
+    photometric_data = [
+        {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]}"},
+        {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]}"},
+        {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]}"},
+        {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]}"},
+        {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]}"},
+        {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]}"},
+        {"Parameter": "Units Type", "Details": f"{photometric_params[6]}"},
+        {"Parameter": "Width", "Details": f"{photometric_params[7]}"},
+        {"Parameter": "Length", "Details": f"{photometric_params[8]}"},
+        {"Parameter": "Height", "Details": f"{photometric_params[9]}"},
+        {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]}"},
+        {"Parameter": "Future Use", "Details": f"{photometric_params[11]}"},
+        {"Parameter": "Input Watts", "Details": f"{photometric_params[12]}"},
+    ]
+    st.table(pd.DataFrame(photometric_data))
 
-    calculated_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
-    calculated_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
+    st.subheader("✨ Computed Baseline Data")
 
-    # === IES Metadata ===
-    with st.expander("📄 IES Metadata", expanded=False):
-        meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
-        st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
+    scaling_factor = st.number_input("LED Chip Efficiency Change (%)", min_value=-100.0, max_value=500.0, value=0.0, step=0.1, help="Input percentage increase or decrease in LED chip efficiency. E.g., enter 10 for 10% more lumens.")
 
-    # === Photometric Parameters ===
-    with st.expander("📐 Photometric Parameters", expanded=False):
-        photometric_data = [
-            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
-            {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm"},
-            {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f}"},
-            {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]}"},
-            {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]}"},
-            {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]}"},
-            {"Parameter": "Units Type", "Details": f"{photometric_params[6]}"},
-            {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
-            {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
-            {"Parameter": "Height", "Details": f"{photometric_params[9]:.2f} m"},
-            {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]:.1f}"},
-            {"Parameter": "Future Use", "Details": f"{photometric_params[11]}"},
-            {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"}
-        ]
-        photometric_df = pd.DataFrame(photometric_data)
-        st.table(photometric_df)
+    total_lumens, input_watts, efficacy_lm_per_w, lumens_per_m = compute_lumen_data(photometric_params, scaling_factor)
 
-    # === Computed Baseline with Chip Scaling ===
-    with st.expander("✨ Computed Baseline Data + LED Chip Scaling", expanded=False):
-        st.markdown("#### Base Lumen Output")
-        st.metric(label="Total Lumens", value=f"{calculated_lumens:.1f}")
-        st.metric(label="Efficacy (lm/W)", value=f"{calculated_lm_per_watt:.1f}")
-        st.metric(label="Lumens per Meter", value=f"{calculated_lm_per_m:.1f}")
-
-        st.divider()
-
-        st.markdown("#### LED Chip Efficiency Scaling")
-        efficiency_change = st.slider("LED Chip Scaling (%)", -50.0, 50.0, 0.0, step=0.1)
-        scaled_lumens = round(calculated_lumens * (1 + efficiency_change / 100), 1)
-        scaled_lm_per_watt = round(scaled_lumens / input_watts, 1) if input_watts > 0 else 0
-        scaled_lm_per_m = round(scaled_lumens / length_m, 1) if length_m > 0 else 0
-
-        st.metric(label="Scaled Lumens", value=f"{scaled_lumens:.1f}")
-        st.metric(label="Scaled Efficacy (lm/W)", value=f"{scaled_lm_per_watt:.1f}")
-        st.metric(label="Scaled Lumens per Meter", value=f"{scaled_lm_per_m:.1f}")
-
-        if efficiency_change != 0.0:
-            comment = st.text_area("Mandatory Comment", placeholder="Explain the reason for scaling...")
-            if not comment:
-                st.error("Comment is mandatory when scaling is applied!")
-
-else:
-    st.info("📄 Upload your IES file to proceed.")
+    baseline_data = [
+        {"Description": "Total Lumens", "Value": total_lumens},
+        {"Description": "Input Watts", "Value": input_watts},
+        {"Description": "Efficacy (lm/W)", "Value": efficacy_lm_per_w},
+        {"Description": "Lumens per Meter", "Value": lumens_per_m}
+    ]
+    st.table(pd.DataFrame(baseline_data).style.format({"Value": "{:.1f}"}))
 
 # === FOOTER ===
-st.caption("Version 2.1c - Advanced LED Customisation + Computed Scaling")
+st.caption("Version 2.1b - Matrix, Advanced Settings, Computed Baseline, Photometric Params with Tooltips.")
