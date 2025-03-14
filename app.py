@@ -16,8 +16,8 @@ if 'matrix_version' not in st.session_state:
     st.session_state['matrix_version'] = []
 if 'advanced_unlocked' not in st.session_state:
     st.session_state['advanced_unlocked'] = False
-if 'led_scaling' not in st.session_state:
-    st.session_state['led_scaling'] = 0.0  # Default to 0%
+if 'chip_scaling' not in st.session_state:
+    st.session_state['chip_scaling'] = 0.0
 
 # === SIDEBAR ===
 with st.sidebar:
@@ -30,11 +30,10 @@ with st.sidebar:
         if matrix_file:
             df_new_matrix = pd.read_csv(matrix_file)
             required_columns = [
-                'Option Code', 'Option Description',
-                'Diffuser / Louvre Code', 'Diffuser / Louvre Description',
-                'Driver Code', 'Wiring Code', 'Wiring Description',
-                'Driver Description', 'Dimensions Code', 'Dimensions Description',
-                'CRI Code', 'CRI Description', 'CCT/Colour Code', 'CCT/Colour Description'
+                'Option Code', 'Option Description', 'Diffuser Code', 'Diffuser Description',
+                'Driver Code', 'Driver Description', 'Wiring Code', 'Wiring Description',
+                'Dimensions Code', 'Dimensions Description', 'CRI Code', 'CRI Description',
+                'CCT Code', 'CCT Description'
             ]
             if all(col in df_new_matrix.columns for col in required_columns):
                 st.session_state['matrix_lookup'] = df_new_matrix
@@ -58,9 +57,7 @@ with st.sidebar:
         pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
         spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
 
-        st.markdown("### 🔧 LED Version 'Chip Scaling' (%)")
-        scaling = st.number_input("LED Version 'Chip Scaling'", min_value=-50.0, max_value=50.0, value=st.session_state['led_scaling'], step=0.1)
-        st.session_state['led_scaling'] = scaling
+        st.session_state['chip_scaling'] = st.number_input("LED Version 'Chip Scaling' (%)", min_value=-50.0, max_value=50.0, value=0.0, step=0.1)
 
         if st.button("Unlock Advanced Settings"):
             st.session_state['advanced_unlocked'] = True
@@ -131,6 +128,30 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
+def parse_lumcat(lumcat_code, lookup_matrix):
+    try:
+        diffuser_code = lumcat_code[6:8]
+        wiring_code = lumcat_code[8:9]
+        driver_code = lumcat_code[9:11]
+        cri_code = lumcat_code[14:16]
+        cct_code = lumcat_code[16:18]
+
+        diffuser_desc = lookup_matrix.loc[lookup_matrix['Diffuser Code'] == diffuser_code, 'Diffuser Description'].values
+        wiring_desc = lookup_matrix.loc[lookup_matrix['Wiring Code'] == wiring_code, 'Wiring Description'].values
+        driver_desc = lookup_matrix.loc[lookup_matrix['Driver Code'] == driver_code, 'Driver Description'].values
+        cri_desc = lookup_matrix.loc[lookup_matrix['CRI Code'] == cri_code, 'CRI Description'].values
+        cct_desc = lookup_matrix.loc[lookup_matrix['CCT Code'] == cct_code, 'CCT Description'].values
+
+        return [
+            {"Type": "Diffuser / Louvre", "Value": diffuser_desc[0] if len(diffuser_desc) else "Unknown"},
+            {"Type": "Wiring", "Value": wiring_desc[0] if len(wiring_desc) else "Unknown"},
+            {"Type": "Driver", "Value": driver_desc[0] if len(driver_desc) else "Unknown"},
+            {"Type": "CRI", "Value": cri_desc[0] if len(cri_desc) else "Unknown"},
+            {"Type": "CCT", "Value": cct_desc[0] if len(cct_desc) else "Unknown"}
+        ]
+    except Exception as e:
+        return [{"Type": "Error", "Value": str(e)}]
+
 # === MAIN DISPLAY ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
@@ -141,51 +162,51 @@ if st.session_state['ies_files']:
     input_watts = photometric_params[12]
     length_m = photometric_params[8]
 
-    base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
-    base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
-
-    # === Scaled Values ===
-    scaling_factor = 1 + (st.session_state['led_scaling'] / 100)
-    scaled_lumens = round(calculated_lumens * scaling_factor, 1)
+    scaled_factor = 1 + st.session_state['chip_scaling'] / 100
+    scaled_lumens = round(calculated_lumens * scaled_factor, 1)
     scaled_lm_per_watt = round(scaled_lumens / input_watts, 1) if input_watts > 0 else 0
     scaled_lm_per_m = round(scaled_lumens / length_m, 1) if length_m > 0 else 0
 
-    # === DISPLAY ===
+    # === Photometric Parameters + Metadata ===
     with st.expander("📏 Photometric Parameters + Metadata", expanded=False):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
-        st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-        st.markdown("#### Photometric Parameters")
         photometric_data = [
-            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
-            {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm"},
+            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]}"},
+            {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]}"},
             {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f}"},
             {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]}"},
             {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]}"},
-            {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]}"},
-            {"Parameter": "Units Type", "Details": f"{photometric_params[6]}"},
             {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
             {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
             {"Parameter": "Height", "Details": f"{photometric_params[9]:.2f} m"},
-            {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]:.1f}"},
-            {"Parameter": "Future Use", "Details": f"{photometric_params[11]}"},
             {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"}
         ]
-        photometric_df = pd.DataFrame(photometric_data)
-        st.table(photometric_df)
+        st.table(pd.DataFrame(photometric_data))
 
-    with st.expander("✨ Computed Baseline + Scaled Values", expanded=False):
+    # === Mapped LUMCAT Values ===
+    lumcat_code = next((line.split(']')[-1].strip() for line in header_lines if "[LUMCAT]" in line), None)
+    if lumcat_code and not st.session_state['matrix_lookup'].empty:
+        mapped_values = parse_lumcat(lumcat_code, st.session_state['matrix_lookup'])
+        with st.expander("🔎 Mapped LUMCAT Values", expanded=False):
+            st.table(pd.DataFrame(mapped_values))
+
+    # === Computed Baseline and Scaled ===
+    with st.expander("✨ Computed Baseline + Scaled Values", expanded=True):
         baseline_data = [
-            {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}", "Scaled": f"{scaled_lumens:.1f}"},
-            {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}", "Scaled": f"{scaled_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}", "Scaled": f"{scaled_lm_per_m:.1f}"}
+            {"Metric": "LED Base Total Lumens", "Value": f"{calculated_lumens:.1f}"},
+            {"Metric": "LED Base Efficacy (lm/W)", "Value": f"{round(calculated_lumens / input_watts, 1):.1f}"},
+            {"Metric": "LED Base Lumens per Meter", "Value": f"{round(calculated_lumens / length_m, 1):.1f}"},
+            {"Metric": f"LED Version 'Chip Scaling' ({st.session_state['chip_scaling']}%)", "Value": ""},
+            {"Metric": "Scaled Total Lumens", "Value": f"{scaled_lumens:.1f}"},
+            {"Metric": "Scaled Efficacy (lm/W)", "Value": f"{scaled_lm_per_watt:.1f}"},
+            {"Metric": "Scaled Lumens per Meter", "Value": f"{scaled_lm_per_m:.1f}"}
         ]
-        baseline_df = pd.DataFrame(baseline_data)
-        st.table(baseline_df)
+        st.table(pd.DataFrame(baseline_data))
 
 else:
     st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 2.1e - LED Chip Scaling + Table Refactor")
+st.caption("Version 2.2 - Advanced Settings, Mapped LUMCAT & Computed Scaling Tables")
