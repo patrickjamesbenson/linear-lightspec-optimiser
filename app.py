@@ -15,10 +15,11 @@ uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
-    st.session_state['ies_files'].append({
+    # Clear previous files and add the new file
+    st.session_state['ies_files'] = [{
         'name': uploaded_file.name,
         'content': file_content
-    })
+    }]
 
 # === FUNCTION DEFINITIONS ===
 def parse_ies_file(file_content):
@@ -77,16 +78,9 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 2)
 
-# === PROCESS AND DISPLAY EACH FILE ===
+# === PROCESS AND DISPLAY FILE ===
 if st.session_state['ies_files']:
-    file_names = [f["name"] for f in st.session_state['ies_files']]
-    selected_file_index = st.selectbox("Select an IES file to display:", range(len(file_names)), format_func=lambda x: file_names[x])
-
-    ies_file = st.session_state['ies_files'][selected_file_index]
-
-    if st.button("Delete Selected File"):
-        del st.session_state['ies_files'][selected_file_index]
-        st.experimental_rerun()
+    ies_file = st.session_state['ies_files'][0]
 
     st.markdown(f"### 📂 File: {ies_file['name']}")
 
@@ -128,4 +122,4 @@ if st.session_state['ies_files']:
         photometric_df = pd.DataFrame(photometric_data)
         st.table(photometric_df)
 else:
-    st.warning("Please upload at least one IES file to proceed.")
+    st.warning("Please upload an IES file to proceed.")
