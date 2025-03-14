@@ -32,6 +32,9 @@ if 'matrix_lookup' not in st.session_state:
         'CCT Description': ['2700K']
     })
 
+if 'auth' not in st.session_state:
+    st.session_state['auth'] = False
+
 # === FILE UPLOAD ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
@@ -99,18 +102,23 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
-# === MATRIX FILE MANAGEMENT ===
 def download_matrix_template():
     return st.session_state['matrix_lookup']
 
 # === SIDEBAR MAINTENANCE ===
 with st.sidebar.expander("⚙️ Maintenance", expanded=False):
     password_input = st.text_input("Password", type="password", placeholder="Author DOB DDMM")
-    if password_input == "1901":  # Replace with actual DOB
+    if password_input == "1901":  # Replace "1901" with the actual DOB code
+        st.session_state['auth'] = True
+        st.success("Access granted. You can now manage the matrix.")
+    else:
+        st.caption("PWD Hint - Author DOB DDMM")
+
+    if st.session_state['auth']:
         st.caption("✅ Download current version first. Then adjust and re-upload.")
         csv = download_matrix_template().to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="Download Matrix CSV",
+            label="Download Current Matrix CSV",
             data=csv,
             file_name='matrix_current.csv',
             mime='text/csv'
@@ -131,8 +139,6 @@ with st.sidebar.expander("⚙️ Maintenance", expanded=False):
                 st.success(f"Matrix updated! Version: {version_time}")
             else:
                 st.error("Upload failed. Check column headers.")
-    else:
-        st.caption("PWD Hint - Author DOB DDMM")
 
 # === PROCESS AND DISPLAY FILE ===
 if st.session_state['ies_files']:
@@ -147,7 +153,6 @@ if st.session_state['ies_files']:
     calculated_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     calculated_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    # === DISPLAY COMPUTED BASELINE ===
     st.subheader("✨ Computed Baseline Data")
     baseline_data = [
         {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}"},
@@ -157,13 +162,11 @@ if st.session_state['ies_files']:
     baseline_df = pd.DataFrame(baseline_data)
     st.table(baseline_df)
 
-    # === DISPLAY IES METADATA ===
     st.subheader("📄 IES Metadata")
     meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
     ies_df = pd.DataFrame(list(meta_dict.items()), columns=["Field", "Value"])
     st.table(ies_df)
 
-    # === DISPLAY PHOTOMETRIC PARAMETERS ===
     st.subheader("📐 Photometric Parameters")
     photometric_data = [
         {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]}"},
@@ -183,7 +186,6 @@ if st.session_state['ies_files']:
     photometric_df = pd.DataFrame(photometric_data)
     st.table(photometric_df)
 
-    # === DISPLAY LOOKUP TABLE VALUES ===
     st.subheader("📚 Lookup Table")
     lookup = st.session_state['matrix_lookup']
 
