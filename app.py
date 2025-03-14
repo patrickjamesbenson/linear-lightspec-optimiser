@@ -79,30 +79,36 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
 # === PROCESS AND DISPLAY EACH FILE ===
 if st.session_state['ies_files']:
-    for idx, ies_file in enumerate(st.session_state['ies_files']):
-        st.markdown(f"### 📂 File {idx + 1}: {ies_file['name']}")
+    file_names = [f["name"] for f in st.session_state['ies_files']]
+    selected_file_index = st.selectbox("Select an IES file to display:", range(len(file_names)), format_func=lambda x: file_names[x])
 
-        header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(ies_file['content'])
+    ies_file = st.session_state['ies_files'][selected_file_index]
 
-        calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
-        input_watts = photometric_params[12]
-        calculated_lm_per_watt = round(calculated_lumens / input_watts, 2) if input_watts > 0 else 0
+    if st.button("Delete Selected File"):
+        del st.session_state['ies_files'][selected_file_index]
+        st.experimental_rerun()
 
-        # === DISPLAY COMPUTED BASELINE ===
-        st.markdown("#### ✨ Computed Baseline Data")
-        st.metric(label="Calculated Total Lumens (lm)", value=f"{calculated_lumens}")
-        st.metric(label="Calculated Lumens per Watt (lm/W)", value=f"{calculated_lm_per_watt}")
-        st.info("All displayed computed values are generated dynamically based on the uploaded IES file and serve as a verification baseline.")
+    st.markdown(f"### 📂 File: {ies_file['name']}")
 
-        # === DISPLAY IES METADATA ===
-        st.markdown("#### 📄 IES Metadata")
+    header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(ies_file['content'])
+
+    calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
+    input_watts = photometric_params[12]
+    calculated_lm_per_watt = round(calculated_lumens / input_watts, 2) if input_watts > 0 else 0
+
+    # === DISPLAY COMPUTED BASELINE ===
+    st.markdown("#### ✨ Computed Baseline Data")
+    st.metric(label="Calculated Total Lumens (lm)", value=f"{calculated_lumens}")
+    st.metric(label="Calculated Lumens per Watt (lm/W)", value=f"{calculated_lm_per_watt}")
+    st.info("All displayed computed values are generated dynamically based on the uploaded IES file and serve as a verification baseline.")
+
+    # === DISPLAY IES METADATA ===
+    with st.expander("📄 IES Metadata", expanded=False):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
-
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-        # === DISPLAY PHOTOMETRIC PARAMETERS ===
-        st.markdown("#### 📐 Photometric Parameters")
-
+    # === DISPLAY PHOTOMETRIC PARAMETERS ===
+    with st.expander("📐 Photometric Parameters", expanded=False):
         photometric_data = [
             {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
             {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm (absolute photometry)" if photometric_params[1] < 0 else f"{photometric_params[1]} lm"},
