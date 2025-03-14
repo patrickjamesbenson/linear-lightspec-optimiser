@@ -17,7 +17,7 @@ if 'matrix_version' not in st.session_state:
 if 'advanced_unlocked' not in st.session_state:
     st.session_state['advanced_unlocked'] = False
 if 'led_scaling' not in st.session_state:
-    st.session_state['led_scaling'] = 15.0  # Default to 15%
+    st.session_state['led_scaling'] = 0.0  # Default to 0%
 
 # === SIDEBAR ===
 with st.sidebar:
@@ -58,8 +58,8 @@ with st.sidebar:
         pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
         spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
 
-        st.markdown("### 🔧 LED Chip Scaling (%)")
-        scaling = st.number_input("LED Chip Scaling", min_value=-50.0, max_value=50.0, value=st.session_state['led_scaling'], step=0.1)
+        st.markdown("### 🔧 LED Version 'Chip Scaling' (%)")
+        scaling = st.number_input("LED Version 'Chip Scaling'", min_value=-50.0, max_value=50.0, value=st.session_state['led_scaling'], step=0.1)
         st.session_state['led_scaling'] = scaling
 
         if st.button("Unlock Advanced Settings"):
@@ -177,9 +177,9 @@ if st.session_state['ies_files']:
 
     with st.expander("✨ Computed Baseline + Scaled Values", expanded=False):
         baseline_data = [
-            {"Description": "Total Lumens", "Base": f"{calculated_lumens:.1f}", "Scaled": f"{scaled_lumens:.1f}"},
-            {"Description": "Efficacy (lm/W)", "Base": f"{base_lm_per_watt:.1f}", "Scaled": f"{scaled_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "Base": f"{base_lm_per_m:.1f}", "Scaled": f"{scaled_lm_per_m:.1f}"}
+            {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}", "Scaled": f"{scaled_lumens:.1f}"},
+            {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}", "Scaled": f"{scaled_lm_per_watt:.1f}"},
+            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}", "Scaled": f"{scaled_lm_per_m:.1f}"}
         ]
         baseline_df = pd.DataFrame(baseline_data)
         st.table(baseline_df)
@@ -188,4 +188,4 @@ else:
     st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 2.1d - Matrix Validation + Advanced Scaling Control")
+st.caption("Version 2.1e - LED Chip Scaling + Table Refactor")
