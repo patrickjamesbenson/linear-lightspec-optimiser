@@ -16,6 +16,8 @@ if 'matrix_version' not in st.session_state:
     st.session_state['matrix_version'] = []
 if 'advanced_unlocked' not in st.session_state:
     st.session_state['advanced_unlocked'] = False
+if 'led_scaling' not in st.session_state:
+    st.session_state['led_scaling'] = 15.0  # Default to 15%
 
 # === SIDEBAR ===
 with st.sidebar:
@@ -28,10 +30,11 @@ with st.sidebar:
         if matrix_file:
             df_new_matrix = pd.read_csv(matrix_file)
             required_columns = [
-                'Option Code', 'Option Description', 'Diffuser Code', 'Diffuser Description',
-                'Driver Code', 'Driver Description', 'Wiring Code', 'Wiring Description',
-                'Dimensions Code', 'Dimensions Description', 'CRI Code', 'CRI Description',
-                'CCT Code', 'CCT Description'
+                'Option Code', 'Option Description',
+                'Diffuser / Louvre Code', 'Diffuser / Louvre Description',
+                'Driver Code', 'Wiring Code', 'Wiring Description',
+                'Driver Description', 'Dimensions Code', 'Dimensions Description',
+                'CRI Code', 'CRI Description', 'CCT/Colour Code', 'CCT/Colour Description'
             ]
             if all(col in df_new_matrix.columns for col in required_columns):
                 st.session_state['matrix_lookup'] = df_new_matrix
@@ -54,6 +57,10 @@ with st.sidebar:
         end_plate_thickness = st.number_input("End Plate Thickness (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1)
         pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
         spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
+
+        st.markdown("### 🔧 LED Chip Scaling (%)")
+        scaling = st.number_input("LED Chip Scaling", min_value=-50.0, max_value=50.0, value=st.session_state['led_scaling'], step=0.1)
+        st.session_state['led_scaling'] = scaling
 
         if st.button("Unlock Advanced Settings"):
             st.session_state['advanced_unlocked'] = True
@@ -134,11 +141,17 @@ if st.session_state['ies_files']:
     input_watts = photometric_params[12]
     length_m = photometric_params[8]
 
-    calculated_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
-    calculated_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
+    base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
+    base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    # === IES Metadata + Photometric Parameters ===
-    with st.expander("📄 IES Metadata & Photometric Parameters", expanded=False):
+    # === Scaled Values ===
+    scaling_factor = 1 + (st.session_state['led_scaling'] / 100)
+    scaled_lumens = round(calculated_lumens * scaling_factor, 1)
+    scaled_lm_per_watt = round(scaled_lumens / input_watts, 1) if input_watts > 0 else 0
+    scaled_lm_per_m = round(scaled_lumens / length_m, 1) if length_m > 0 else 0
+
+    # === DISPLAY ===
+    with st.expander("📏 Photometric Parameters + Metadata", expanded=False):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
         st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
@@ -162,32 +175,17 @@ if st.session_state['ies_files']:
         photometric_df = pd.DataFrame(photometric_data)
         st.table(photometric_df)
 
-    # === Computed Baseline + LED Chip Scaling ===
-    with st.expander("✨ Computed Baseline Data + LED Chip Scaling", expanded=False):
-        st.markdown("#### Base Values")
-        st.metric(label="Total Lumens", value=f"{calculated_lumens:.1f}")
-        st.metric(label="Efficacy (lm/W)", value=f"{calculated_lm_per_watt:.1f}")
-        st.metric(label="Lumens per Meter", value=f"{calculated_lm_per_m:.1f}")
-
-        st.divider()
-
-        st.markdown("#### LED Chip Efficiency Scaling")
-        efficiency_change = st.number_input("LED Chip Scaling (%)", min_value=-50.0, max_value=50.0, value=0.0, step=0.1)
-        scaled_lumens = round(calculated_lumens * (1 + efficiency_change / 100), 1)
-        scaled_lm_per_watt = round(scaled_lumens / input_watts, 1) if input_watts > 0 else 0
-        scaled_lm_per_m = round(scaled_lumens / length_m, 1) if length_m > 0 else 0
-
-        st.metric(label="Scaled Lumens", value=f"{scaled_lumens:.1f}")
-        st.metric(label="Scaled Efficacy (lm/W)", value=f"{scaled_lm_per_watt:.1f}")
-        st.metric(label="Scaled Lumens per Meter", value=f"{scaled_lm_per_m:.1f}")
-
-        if efficiency_change != 0.0:
-            comment = st.text_area("Mandatory Comment", placeholder="Explain the reason for scaling...")
-            if not comment:
-                st.error("Comment is mandatory when scaling is applied!")
+    with st.expander("✨ Computed Baseline + Scaled Values", expanded=False):
+        baseline_data = [
+            {"Description": "Total Lumens", "Base": f"{calculated_lumens:.1f}", "Scaled": f"{scaled_lumens:.1f}"},
+            {"Description": "Efficacy (lm/W)", "Base": f"{base_lm_per_watt:.1f}", "Scaled": f"{scaled_lm_per_watt:.1f}"},
+            {"Description": "Lumens per Meter", "Base": f"{base_lm_per_m:.1f}", "Scaled": f"{scaled_lm_per_m:.1f}"}
+        ]
+        baseline_df = pd.DataFrame(baseline_data)
+        st.table(baseline_df)
 
 else:
     st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 2.1d - Advanced LED Customisation + Computed Scaling Restored")
+st.caption("Version 2.1d - Matrix Validation + Advanced Scaling Control")
