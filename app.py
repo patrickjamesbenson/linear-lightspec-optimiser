@@ -78,6 +78,17 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 2)
 
+# === PLACEHOLDER LOOKUP MATRIX ===
+def get_matrix_lookup():
+    return {
+        'Option': 'No Special Option',
+        'Diffuser': 'None',
+        'Driver': 'Standard Fixed Output Driver',
+        'Wiring': 'Hardwired',
+        'CRI': '90',
+        'CCT': '4000K'
+    }
+
 # === PROCESS AND DISPLAY FILE ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
@@ -91,8 +102,8 @@ if st.session_state['ies_files']:
     # === DISPLAY COMPUTED BASELINE ===
     st.markdown("""
         <div style='font-size: 0.75rem;'>
-            <strong>Calculated Total Lumens (lm):</strong> {0}<br>
-            <strong>Calculated Lumens per Watt (lm/W):</strong> {1}
+            <strong>Total Lumens (lm):</strong> {0}<br>
+            <strong>Lumens per Watt (lm/W):</strong> {1}
         </div>
     """.format(calculated_lumens, calculated_lm_per_watt), unsafe_allow_html=True)
 
@@ -121,5 +132,12 @@ if st.session_state['ies_files']:
 
         photometric_df = pd.DataFrame(photometric_data)
         st.table(photometric_df)
+
+    # === DISPLAY MATRIX LOOKUP ===
+    with st.expander("🔍 Matrix Lookup Data", expanded=False):
+        matrix_data = get_matrix_lookup()
+        matrix_df = pd.DataFrame(list(matrix_data.items()), columns=["Description Type", "Outcome"])
+        st.table(matrix_df)
+
 else:
     st.warning("Please upload an IES file to proceed.")
