@@ -14,6 +14,18 @@ if 'ies_files' not in st.session_state:
 if 'matrix_version' not in st.session_state:
     st.session_state['matrix_version'] = []
 
+# === PASSWORD PROTECTION ===
+if 'authenticated' not in st.session_state:
+    st.session_state['authenticated'] = False
+
+if not st.session_state['authenticated']:
+    password = st.text_input("Enter Password to Access Maintenance Panel", type="password")
+    if password == "DDMM":  # Replace DDMM with actual digits when ready
+        st.session_state['authenticated'] = True
+    else:
+        st.warning("PWD Hint - Author DOB DDMM")
+        st.stop()
+
 # === FILE UPLOAD ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
@@ -27,7 +39,9 @@ if uploaded_file:
 # === FUNCTION DEFINITIONS ===
 def parse_ies_file(file_content):
     lines = file_content.splitlines()
-    header_lines, tilt_line, data_lines = [], '', []
+    header_lines = []
+    tilt_line = ''
+    data_lines = []
     reading_data = False
 
     for line in lines:
@@ -79,15 +93,15 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
-# === MATRIX MANAGEMENT ===
+# === PLACEHOLDER LOOKUP MATRIX ===
 def get_matrix_lookup():
     if 'matrix_lookup' in st.session_state:
         return st.session_state['matrix_lookup']
     return pd.DataFrame({
         'Option Code': ['NS'],
         'Option Description': ['No Special Option'],
-        'Diffuser Code': ['AA'],
-        'Diffuser Description': ['None'],
+        'Diffuser / Louvre Code': ['AA'],
+        'Diffuser / Louvre Description': ['None'],
         'Driver Code': ['AA'],
         'Driver Description': ['Standard Fixed Output Driver'],
         'Wiring Code': ['A'],
@@ -96,48 +110,56 @@ def get_matrix_lookup():
         'Dimensions Description': ['265mm x 265mm'],
         'CRI Code': ['80'],
         'CRI Description': ['80'],
-        'CCT Code': ['27'],
-        'CCT Description': ['2700K']
+        'CCT/Colour Code': ['27'],
+        'CCT/Colour Description': ['2700K']
     })
 
 # === MATRIX FILE MANAGEMENT ===
-st.sidebar.markdown("### Matrix Download/Upload")
+def download_matrix_template():
+    return get_matrix_lookup()
 
-if st.sidebar.button("Download Current Matrix"):
-    csv = get_matrix_lookup().to_csv(index=False).encode('utf-8')
-    st.sidebar.download_button(
-        label="Download Matrix CSV",
-        data=csv,
-        file_name='matrix_current.csv',
-        mime='text/csv'
-    )
+with st.sidebar.expander("🔧 Maintenance Panel", expanded=False):
+    st.markdown("#### Matrix Download/Upload Area")
+    st.caption("✅ Download current version first.  
+                ✅ Edit only values (don't change column names).  
+                ✅ Upload new version when ready.")
+    
+    if st.button("Download Current Matrix"):
+        csv = download_matrix_template().to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Download Matrix CSV",
+            data=csv,
+            file_name='matrix_current.csv',
+            mime='text/csv'
+        )
 
-uploaded_matrix = st.sidebar.file_uploader("Upload Updated Matrix CSV", type=["csv"])
+    uploaded_matrix = st.file_uploader("Upload Updated Matrix CSV", type=["csv"])
 
-if uploaded_matrix:
-    df_new_matrix = pd.read_csv(uploaded_matrix)
-    required_columns = [
-        'Option Code', 'Option Description',
-        'Diffuser Code', 'Diffuser Description',
-        'Driver Code', 'Driver Description',
-        'Wiring Code', 'Wiring Description',
-        'Dimensions Code', 'Dimensions Description',
-        'CRI Code', 'CRI Description',
-        'CCT Code', 'CCT Description'
-    ]
-    if all(col in df_new_matrix.columns for col in required_columns):
-        st.session_state['matrix_lookup'] = df_new_matrix
-        version_time = int(time.time())
-        st.session_state['matrix_version'].append(version_time)
-        st.sidebar.success(f"Matrix updated! Version: {version_time}")
-    else:
-        st.sidebar.error("Matrix upload failed. Missing required columns.")
+    if uploaded_matrix:
+        df_new_matrix = pd.read_csv(uploaded_matrix)
+        required_columns = [
+            'Option Code', 'Option Description',
+            'Diffuser / Louvre Code', 'Diffuser / Louvre Description',
+            'Driver Code', 'Driver Description',
+            'Wiring Code', 'Wiring Description',
+            'Dimensions Code', 'Dimensions Description',
+            'CRI Code', 'CRI Description',
+            'CCT/Colour Code', 'CCT/Colour Description'
+        ]
 
-if st.sidebar.button("Rollback to Previous Version") and len(st.session_state['matrix_version']) > 1:
-    st.session_state['matrix_version'].pop()
-    st.sidebar.info(f"Rolled back to version: {st.session_state['matrix_version'][-1]}")
+        if all(col in df_new_matrix.columns for col in required_columns):
+            st.session_state['matrix_lookup'] = df_new_matrix
+            version_time = int(time.time())
+            st.session_state['matrix_version'].append(version_time)
+            st.success(f"Matrix updated successfully! Version: {version_time}")
+        else:
+            st.error("Matrix upload failed. Missing required columns.")
 
-# === DISPLAY IES FILE ===
+    if st.button("Rollback to Previous Version") and len(st.session_state['matrix_version']) > 1:
+        st.session_state['matrix_version'].pop()
+        st.info(f"Rolled back to version: {st.session_state['matrix_version'][-1]}")
+
+# === PROCESS AND DISPLAY FILE ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
 
@@ -150,31 +172,28 @@ if st.session_state['ies_files']:
     calculated_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     calculated_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    # === DISPLAY COMPUTED BASELINE ===
-    with st.expander("✨ Computed Baseline Data", expanded=False):
+    with st.expander("📦 IES Metadata & Computed Parameters", expanded=False):
+        # Computed Baseline Data
         baseline_data = [
-            {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}"},
-            {"Description": "Efficacy (lm/W)", "Value": f"{calculated_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "Value": f"{calculated_lm_per_m:.1f}"}
+            {"Description": "Total Lumens", "Value": calculated_lumens},
+            {"Description": "Efficacy (lm/W)", "Value": calculated_lm_per_watt},
+            {"Description": "Lumens per Meter", "Value": calculated_lm_per_m},
         ]
-        baseline_df = pd.DataFrame(baseline_data)
-        st.table(baseline_df)
+        st.table(pd.DataFrame(baseline_data).style.format({"Value": "{:.1f}"}))
 
-    # === DISPLAY IES METADATA ===
-    with st.expander("📄 IES Metadata", expanded=False):
+        # IES Metadata
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-    # === DISPLAY PHOTOMETRIC PARAMETERS ===
-    with st.expander("📐 Photometric Parameters", expanded=False):
+        # Photometric Parameters
         photometric_data = [
             {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
             {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm (absolute photometry)" if photometric_params[1] < 0 else f"{photometric_params[1]} lm"},
             {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f}"},
             {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]}"},
             {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]}"},
-            {"Parameter": "Photometric Type", "Details": "Type C" if photometric_params[5] == 1 else "Other"},
-            {"Parameter": "Units Type", "Details": "Meters" if photometric_params[6] == 2 else "Feet"},
+            {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]} (Type C)" if photometric_params[5] == 1 else f"{photometric_params[5]}"},
+            {"Parameter": "Units Type", "Details": f"{photometric_params[6]} (Meters)" if photometric_params[6] == 2 else f"{photometric_params[6]} (Feet)"},
             {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
             {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
             {"Parameter": "Height", "Details": f"{photometric_params[9]:.2f} m"},
@@ -182,7 +201,9 @@ if st.session_state['ies_files']:
             {"Parameter": "Future Use", "Details": f"{photometric_params[11]}"},
             {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"}
         ]
-        photometric_df = pd.DataFrame(photometric_data)
-        st.table(photometric_df)
-else:
-    st.warning("Please upload an IES file to proceed.")
+        st.table(pd.DataFrame(photometric_data))
+
+        # Lookup Table
+        st.subheader("🔎 Lookup Table")
+        st.dataframe(get_matrix_lookup())
+
