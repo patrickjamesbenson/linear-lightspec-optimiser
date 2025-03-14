@@ -32,9 +32,6 @@ if 'matrix_lookup' not in st.session_state:
         'CCT Description': ['2700K']
     })
 
-if 'auth' not in st.session_state:
-    st.session_state['auth'] = False
-
 # === FILE UPLOAD ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
@@ -107,38 +104,32 @@ def download_matrix_template():
 
 # === SIDEBAR MAINTENANCE ===
 with st.sidebar.expander("⚙️ Maintenance", expanded=False):
-    password_input = st.text_input("Password", type="password", placeholder="Author DOB DDMM")
-    if password_input == "1901":  # Replace "1901" with the actual DOB code
-        st.session_state['auth'] = True
-        st.success("Access granted. You can now manage the matrix.")
-    else:
-        st.caption("PWD Hint - Author DOB DDMM")
+    st.caption("✅ Download current version first. Then adjust and re-upload.")
 
-    if st.session_state['auth']:
-        st.caption("✅ Download current version first. Then adjust and re-upload.")
-        csv = download_matrix_template().to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Download Current Matrix CSV",
-            data=csv,
-            file_name='matrix_current.csv',
-            mime='text/csv'
-        )
-        uploaded_matrix = st.file_uploader("Upload Updated Matrix CSV", type=["csv"], key="matrix_upload")
-        if uploaded_matrix:
-            df_new_matrix = pd.read_csv(uploaded_matrix)
-            required_columns = [
-                'Option Code', 'Option Description', 'Diffuser Code', 'Diffuser Description',
-                'Driver Code', 'Driver Description', 'Wiring Code', 'Wiring Description',
-                'Dimensions Code', 'Dimensions Description', 'CRI Code', 'CRI Description',
-                'CCT Code', 'CCT Description'
-            ]
-            if all(col in df_new_matrix.columns for col in required_columns):
-                st.session_state['matrix_lookup'] = df_new_matrix
-                version_time = int(time.time())
-                st.session_state['matrix_version'].append(version_time)
-                st.success(f"Matrix updated! Version: {version_time}")
-            else:
-                st.error("Upload failed. Check column headers.")
+    csv = download_matrix_template().to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="Download Current Matrix CSV",
+        data=csv,
+        file_name='matrix_current.csv',
+        mime='text/csv'
+    )
+
+    uploaded_matrix = st.file_uploader("Upload Updated Matrix CSV", type=["csv"], key="matrix_upload")
+    if uploaded_matrix:
+        df_new_matrix = pd.read_csv(uploaded_matrix)
+        required_columns = [
+            'Option Code', 'Option Description', 'Diffuser Code', 'Diffuser Description',
+            'Driver Code', 'Driver Description', 'Wiring Code', 'Wiring Description',
+            'Dimensions Code', 'Dimensions Description', 'CRI Code', 'CRI Description',
+            'CCT Code', 'CCT Description'
+        ]
+        if all(col in df_new_matrix.columns for col in required_columns):
+            st.session_state['matrix_lookup'] = df_new_matrix
+            version_time = int(time.time())
+            st.session_state['matrix_version'].append(version_time)
+            st.success(f"Matrix updated! Version: {version_time}")
+        else:
+            st.error("Upload failed. Check column headers.")
 
 # === PROCESS AND DISPLAY FILE ===
 if st.session_state['ies_files']:
