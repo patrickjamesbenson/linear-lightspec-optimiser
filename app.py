@@ -92,32 +92,22 @@ if uploaded_file:
 
     # === DISPLAY PHOTOMETRIC PARAMETERS ===
     st.markdown("## 📐 Photometric Parameters")
-    param_labels = [
-        "Number of Lamps", "Lumens per Lamp", "Candela Multiplier",
-        "Vertical Angles Count", "Horizontal Angles Count", "Photometric Type",
-        "Units Type", "Width (m)", "Length (m)", "Height (m)",
-        "Ballast Factor", "Future Use", "Input Watts"
-    ]
 
-    param_comments = [
-        "Total number of lamps used in the test.",
-        "Lumens per lamp (negative means absolute photometry).",
-        "Multiplier applied to candela values.",
-        "Count of vertical angles measured.",
-        "Count of horizontal angles measured.",
-        "Photometric type (1=c, 2=b, 3=a).",
-        "Units type (1=feet, 2=meters).",
-        "Luminaire width (meters).",
-        "Luminaire length (meters).",
-        "Luminaire height (meters).",
-        "Ballast factor used in calculation.",
-        "Future use (typically 1).",
-        "Input power in watts."
+    photometric_data = [
+        {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
+        {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm (absolute photometry)" if photometric_params[1] < 0 else f"{photometric_params[1]} lm"},
+        {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f} (multiplier applied to candela values)"},
+        {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]} vertical angles measured"},
+        {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]} horizontal planes"},
+        {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]} (Type C)" if photometric_params[5] == 1 else f"{photometric_params[5]} (Other)"},
+        {"Parameter": "Units Type", "Details": f"{photometric_params[6]} (Meters)" if photometric_params[6] == 2 else f"{photometric_params[6]} (Feet)"},
+        {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
+        {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
+        {"Parameter": "Height", "Details": f"{photometric_params[9]:.2f} m"},
+        {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]:.1f}"},
+        {"Parameter": "Future Use", "Details": f"{photometric_params[11]} (reserved)"},
+        {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"}
     ]
-
-    photometric_data = []
-    for label, value, comment in zip(param_labels, photometric_params, param_comments):
-        photometric_data.append({"Parameter": label, "Value": f"{value:.1f}", "Comment": comment})
 
     photometric_df = pd.DataFrame(photometric_data)
     st.table(photometric_df)
