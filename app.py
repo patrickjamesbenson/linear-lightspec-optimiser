@@ -82,8 +82,6 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
 
-    st.markdown(f"### 📂 File: {ies_file['name']}")
-
     header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(ies_file['content'])
 
     calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
@@ -91,10 +89,12 @@ if st.session_state['ies_files']:
     calculated_lm_per_watt = round(calculated_lumens / input_watts, 2) if input_watts > 0 else 0
 
     # === DISPLAY COMPUTED BASELINE ===
-    st.markdown("#### ✨ Computed Baseline Data")
-    st.metric(label="Calculated Total Lumens (lm)", value=f"{calculated_lumens}")
-    st.metric(label="Calculated Lumens per Watt (lm/W)", value=f"{calculated_lm_per_watt}")
-    st.info("All displayed computed values are generated dynamically based on the uploaded IES file and serve as a verification baseline.")
+    st.markdown("""
+        <div style='font-size: 0.75rem;'>
+            <strong>Calculated Total Lumens (lm):</strong> {0}<br>
+            <strong>Calculated Lumens per Watt (lm/W):</strong> {1}
+        </div>
+    """.format(calculated_lumens, calculated_lm_per_watt), unsafe_allow_html=True)
 
     # === DISPLAY IES METADATA ===
     with st.expander("📄 IES Metadata", expanded=False):
