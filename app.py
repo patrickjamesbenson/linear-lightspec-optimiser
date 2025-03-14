@@ -46,7 +46,7 @@ with st.sidebar:
             csv = current_matrix.to_csv(index=False).encode('utf-8')
             st.download_button("Download Matrix CSV", csv, "matrix_current.csv", "text/csv")
 
-        st.markdown("### Advanced LED Parameters")
+        st.markdown("### 🛠️ Advanced LED Parameters")
         led_pitch_set = st.number_input("LED Pitch Set (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
         leds_per_pitch_set = st.number_input("LEDs per Pitch Set", min_value=1, max_value=12, value=6)
 
@@ -124,30 +124,6 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
-def parse_lumcat(lumcat_code, lookup_matrix):
-    try:
-        diffuser_code = lumcat_code[6:8]
-        wiring_code = lumcat_code[8:9]
-        driver_code = lumcat_code[9:11]
-        cri_code = lumcat_code[14:16]
-        cct_code = lumcat_code[16:18]
-
-        diffuser_desc = lookup_matrix.loc[lookup_matrix['Diffuser Code'] == diffuser_code, 'Diffuser Description'].values
-        wiring_desc = lookup_matrix.loc[lookup_matrix['Wiring Code'] == wiring_code, 'Wiring Description'].values
-        driver_desc = lookup_matrix.loc[lookup_matrix['Driver Code'] == driver_code, 'Driver Description'].values
-        cri_desc = lookup_matrix.loc[lookup_matrix['CRI Code'] == cri_code, 'CRI Description'].values
-        cct_desc = lookup_matrix.loc[lookup_matrix['CCT Code'] == cct_code, 'CCT Description'].values
-
-        return [
-            {"Type": "Diffuser / Louvre", "Value": diffuser_desc[0] if len(diffuser_desc) else "Unknown"},
-            {"Type": "Wiring", "Value": wiring_desc[0] if len(wiring_desc) else "Unknown"},
-            {"Type": "Driver", "Value": driver_desc[0] if len(driver_desc) else "Unknown"},
-            {"Type": "CRI", "Value": cri_desc[0] if len(cri_desc) else "Unknown"},
-            {"Type": "CCT", "Value": cct_desc[0] if len(cct_desc) else "Unknown"}
-        ]
-    except Exception as e:
-        return [{"Type": "Error", "Value": str(e)}]
-
 # === MAIN DISPLAY ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
@@ -186,27 +162,32 @@ if st.session_state['ies_files']:
         photometric_df = pd.DataFrame(photometric_data)
         st.table(photometric_df)
 
-    # === Computed Baseline ===
-    with st.expander("✨ Computed Baseline Data", expanded=False):
-        baseline_data = [
-            {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}"},
-            {"Description": "Efficacy (lm/W)", "Value": f"{calculated_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "Value": f"{calculated_lm_per_m:.1f}"}
-        ]
-        baseline_df = pd.DataFrame(baseline_data)
-        st.table(baseline_df)
+    # === Computed Baseline with Chip Scaling ===
+    with st.expander("✨ Computed Baseline Data + LED Chip Scaling", expanded=False):
+        st.markdown("#### Base Lumen Output")
+        st.metric(label="Total Lumens", value=f"{calculated_lumens:.1f}")
+        st.metric(label="Efficacy (lm/W)", value=f"{calculated_lm_per_watt:.1f}")
+        st.metric(label="Lumens per Meter", value=f"{calculated_lm_per_m:.1f}")
 
-    # === Lookup Table (LUMCAT) ===
-    lumcat_code = next((line.split(']')[-1].strip() for line in header_lines if "[LUMCAT]" in line), None)
-    if lumcat_code:
-        parsed_lumcat = parse_lumcat(lumcat_code, st.session_state['matrix_lookup'])
+        st.divider()
 
-        with st.expander("🔍 Lookup Table", expanded=False):
-            lookup_df = pd.DataFrame(parsed_lumcat)
-            st.table(lookup_df)
+        st.markdown("#### LED Chip Efficiency Scaling")
+        efficiency_change = st.slider("LED Chip Scaling (%)", -50.0, 50.0, 0.0, step=0.1)
+        scaled_lumens = round(calculated_lumens * (1 + efficiency_change / 100), 1)
+        scaled_lm_per_watt = round(scaled_lumens / input_watts, 1) if input_watts > 0 else 0
+        scaled_lm_per_m = round(scaled_lumens / length_m, 1) if length_m > 0 else 0
+
+        st.metric(label="Scaled Lumens", value=f"{scaled_lumens:.1f}")
+        st.metric(label="Scaled Efficacy (lm/W)", value=f"{scaled_lm_per_watt:.1f}")
+        st.metric(label="Scaled Lumens per Meter", value=f"{scaled_lm_per_m:.1f}")
+
+        if efficiency_change != 0.0:
+            comment = st.text_area("Mandatory Comment", placeholder="Explain the reason for scaling...")
+            if not comment:
+                st.error("Comment is mandatory when scaling is applied!")
 
 else:
     st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 2.1 Stable - Main Display Restored, Sidebar Customisation Finalised")
+st.caption("Version 2.1c - Advanced LED Customisation + Computed Scaling")
