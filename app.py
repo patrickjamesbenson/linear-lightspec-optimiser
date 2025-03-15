@@ -1,129 +1,144 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
 
 # === PAGE CONFIG ===
-st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
-st.title("Linear Lightspec Optimiser")
+st.set_page_config(page_title="LED Stack-Based Length Optimisation", layout="wide")
+st.title("🔧 LED Stack-Based Length Optimisation")
 
 # === SESSION STATE INITIALIZATION ===
-if 'ies_files' not in st.session_state:
-    st.session_state['ies_files'] = []
-if 'matrix_lookup' not in st.session_state:
-    st.session_state['matrix_lookup'] = pd.DataFrame()
-if 'matrix_version' not in st.session_state:
-    st.session_state['matrix_version'] = []
+if 'stack_length' not in st.session_state:
+    st.session_state['stack_length'] = 46.666  # Default Stack A length for Professional
+
+if 'tier' not in st.session_state:
+    st.session_state['tier'] = "Professional"  # Default to Professional
+
+if 'target_length' not in st.session_state:
+    st.session_state['target_length'] = 280.0  # Default target length
+
 if 'advanced_unlocked' not in st.session_state:
     st.session_state['advanced_unlocked'] = False
-if 'led_scaling' not in st.session_state:
-    st.session_state['led_scaling'] = 0.0  # Default to 0%
 
-# === SIDEBAR ===
+# === SIDE BAR SETTINGS ===
 with st.sidebar:
-    st.subheader("⚙️ Advanced Settings")
+    st.subheader("⚙️ Length Optimisation Settings")
 
-    with st.expander("Customisation", expanded=False):
-        st.markdown("### 📁 Matrix Upload / Download")
+    # Tier Selection (Core, Professional, Advanced, Bespoke)
+    st.session_state['tier'] = st.selectbox(
+        "Select Product Tier", ["Core", "Professional", "Advanced", "Bespoke"], index=1
+    )
 
-        matrix_file = st.file_uploader("Upload Matrix CSV", type=["csv"])
-        if matrix_file:
-            df_new_matrix = pd.read_csv(matrix_file)
-            required_columns = [
-                'Option Code', 'Option Description',
-                'Diffuser / Louvre Code', 'Diffuser / Louvre Description',
-                'Driver Code', 'Wiring Code', 'Wiring Description',
-                'Driver Description', 'Dimensions Code', 'Dimensions Description',
-                'CRI Code', 'CRI Description', 'CCT/Colour Code', 'CCT/Colour Description'
-            ]
-            if all(col in df_new_matrix.columns for col in required_columns):
-                st.session_state['matrix_lookup'] = df_new_matrix
-                version_time = int(time.time())
-                st.session_state['matrix_version'].append(version_time)
-                st.success(f"Matrix uploaded! Version timestamp: {version_time}")
-            else:
-                st.error("Matrix upload failed: Missing required columns.")
+    # Display Stack A length based on tier selection
+    if st.session_state['tier'] in ["Professional", "Core"]:
+        st.session_state['stack_length'] = 46.666  # Fixed Stack A in Professional and Core
 
-        if st.button("Download Current Matrix"):
-            current_matrix = st.session_state['matrix_lookup']
-            csv = current_matrix.to_csv(index=False).encode('utf-8')
-            st.download_button("Download Matrix CSV", csv, "matrix_current.csv", "text/csv")
-
-        st.markdown("### 🛠️ Advanced LED Parameters")
-        led_pitch_set = st.number_input("LED Pitch Set (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
-        leds_per_pitch_set = st.number_input("LEDs per Pitch Set", min_value=1, max_value=12, value=6)
-
-        st.markdown("### Component Lengths")
-        
-        # **End Plates (2x)**
-        end_plate_thickness = st.number_input("End Plates (each) (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1)
-        total_end_plate_length = end_plate_thickness * 2
-
-        # **Smart PIR & Spitfire**
-        pir_length = st.number_input("Smart PIR (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
-        spitfire_length = st.number_input("Smart Spitfire (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
-
-        # **Body Max Increment**
-        body_max_increment = st.number_input("Body Max Increment (mm)", min_value=500.0, max_value=5000.0, value=3500.0, step=0.1)
-
-        st.markdown("### 🔧 LED Version 'Chip Scaling' (%)")
-        scaling = st.number_input("LED Version 'Chip Scaling'", min_value=-50.0, max_value=50.0, value=st.session_state['led_scaling'], step=0.1)
-        st.session_state['led_scaling'] = scaling
-
-        if st.button("Unlock Advanced Settings"):
-            st.session_state['advanced_unlocked'] = True
-            st.warning("Super Advanced Users Only: Mandatory comment required.")
-
+    elif st.session_state['tier'] in ["Advanced", "Bespoke"]:
+        st.session_state['advanced_unlocked'] = st.checkbox("🔓 Unlock Advanced Settings")
         if st.session_state['advanced_unlocked']:
-            comment = st.text_area("Mandatory Comment", placeholder="Explain why you are making changes")
-            if not comment:
-                st.error("Comment is mandatory to proceed with changes!")
+            st.session_state['stack_length'] = st.number_input(
+                "Custom Stack A Length (mm)", min_value=30.0, max_value=100.0,
+                value=st.session_state['stack_length'], step=0.1
+            )
 
-# === FILE UPLOAD ON MAIN PAGE ===
-uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
-if uploaded_file:
-    file_content = uploaded_file.read().decode('utf-8')
-    st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
-    st.success(f"{uploaded_file.name} uploaded!")
+    # Target Length Input
+    st.session_state['target_length'] = st.number_input(
+        "Target Luminaire Length (mm)", min_value=100.0, max_value=5000.0,
+        value=st.session_state['target_length'], step=0.1
+    )
 
-# === FUNCTIONS ===
-def parse_ies_file(file_content):
-    lines = file_content.splitlines()
-    header_lines, data_lines = [], []
-    reading_data = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("TILT"):
-            reading_data = True
-        elif not reading_data:
-            header_lines.append(stripped)
-        else:
-            data_lines.append(stripped)
+    st.markdown("---")
+    st.markdown("### 🔧 Component Lengths")
 
-    photometric_raw = " ".join(data_lines[:2]).split()
-    photometric_params = [float(x) if '.' in x or 'e' in x.lower() else int(x) for x in photometric_raw]
+    # End Plates (2x)
+    end_plate_thickness = st.number_input(
+        "End Plates (each) (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1
+    )
+    total_end_plates = end_plate_thickness * 2
+    st.info(f"🔩 Total End Plate Length: `{total_end_plates:.1f} mm`")
 
-    return header_lines, photometric_params
+    # Smart PIR
+    pir_length = st.number_input(
+        "Smart PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1
+    )
 
-def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix, symmetry_factor=4):
-    vert_rad = np.radians(vertical_angles)
-    delta_vert = np.diff(vert_rad)
-    delta_vert = np.append(delta_vert, delta_vert[-1])
+    # Smart Spitfire
+    spitfire_length = st.number_input(
+        "Smart Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1
+    )
 
-    symmetry_range_rad = np.radians(horizontal_angles[-1] - horizontal_angles[0])
-    num_horz_segments = len(horizontal_angles)
-    uniform_delta_horz = symmetry_range_rad / num_horz_segments
+    # Body Max Increment
+    body_max_increment = st.number_input(
+        "Body Max Increment (mm)", min_value=500.0, max_value=5000.0, value=3500.0, step=0.1
+    )
 
-    total_flux = 0.0
-    for h_idx in range(num_horz_segments):
-        candela_row = candela_matrix[h_idx]
-        for v_idx, cd in enumerate(candela_row):
-            theta = vert_rad[v_idx]
-            d_theta = delta_vert[v_idx]
-            flux = cd * np.sin(theta) * d_theta * uniform_delta_horz
-            total_flux += flux
+# === BOARD LENGTH CALCULATIONS ===
+stack_length = st.session_state['stack_length']
+board_b_length = 6 * stack_length  # 280mm default
+board_c_length = 12 * stack_length  # 560mm default
+board_d_length = 24 * stack_length  # 1120mm default
+target_length = st.session_state['target_length']
 
-    return round(total_flux * symmetry_factor, 1)
+# === LENGTH OPTIMISATION FUNCTION ===
+def optimise_length(target, tier):
+    """
+    Finds the best combination of boards to match or get as close as possible to the target length.
+    - Core: Uses only B, C, D.
+    - Professional: Uses B, C, D first, then adds multiple Stack A’s if needed.
+    - Advanced & Bespoke: Uses everything, including flexible Stack A.
+    """
+    used_boards = []
+    remaining_length = target
 
-# === FOOTER ===
-st.caption("Version 3.2 - Smart PIR, Spitfire, End Plates, Body Max Increment Added ✅")
+    # Core: Only uses Board B, C, D
+    if tier == "Core":
+        board_lengths = [board_d_length, board_c_length, board_b_length]
+
+    # Professional: Uses Board B, C, D first, then fills with A
+    elif tier == "Professional":
+        board_lengths = [board_d_length, board_c_length, board_b_length]
+
+    # Advanced & Bespoke: Uses everything, including flexible Stack A
+    else:
+        board_lengths = [board_d_length, board_c_length, board_b_length, stack_length]
+
+    # Primary Board Selection (B, C, D first)
+    for board in board_lengths:
+        while remaining_length >= board:
+            used_boards.append(board)
+            remaining_length -= board
+
+    # Professional Only: Fill remaining gap with multiple A's
+    if remaining_length > 0 and tier == "Professional":
+        while remaining_length >= stack_length:
+            used_boards.append(stack_length)
+            remaining_length -= stack_length
+
+    return used_boards, sum(used_boards)
+
+# Compute the optimised board selection
+selected_boards, final_length = optimise_length(target_length, st.session_state['tier'])
+
+# === MAIN DISPLAY ===
+st.subheader("📏 Optimised Luminaire Build")
+st.write(f"**Selected Product Tier:** `{st.session_state['tier']}`")
+st.write(f"**Stack Length (A):** `{stack_length:.1f} mm`")
+st.write(f"**Target Length:** `{target_length:.1f} mm`")
+st.write(f"**Optimised Length Achieved:** `{final_length:.1f} mm`")
+
+# Display selected board breakdown
+df_boards = pd.DataFrame({"Board Lengths (mm)": selected_boards})
+st.table(df_boards)
+
+# === DISPLAY BOARD SIZES ===
+with st.expander("📋 Board Type Reference", expanded=False):
+    st.markdown("#### Board Lengths Derived from Stack A")
+    board_data = [
+        {"Board": "Stack A", "Formula": "Base Unit", "Length (mm)": f"{stack_length:.1f}"},
+        {"Board": "Board B", "Formula": "6 x A", "Length (mm)": f"{board_b_length:.1f}"},
+        {"Board": "Board C", "Formula": "12 x A", "Length (mm)": f"{board_c_length:.1f}"},
+        {"Board": "Board D", "Formula": "24 x A", "Length (mm)": f"{board_d_length:.1f}"}
+    ]
+    board_df = pd.DataFrame(board_data)
+    st.table(board_df)
+
+st.caption("Version 3.2 - Component Lengths & Optimisation Module ✅")
