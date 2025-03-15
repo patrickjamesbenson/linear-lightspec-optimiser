@@ -48,33 +48,45 @@ with st.sidebar:
 
 # === BOARD LENGTH CALCULATIONS ===
 stack_length = st.session_state['stack_length']
-board_b_length = 6 * stack_length
-board_c_length = 12 * stack_length
-board_d_length = 24 * stack_length
+board_b_length = 6 * stack_length  # 280mm
+board_c_length = 12 * stack_length  # 560mm
+board_d_length = 24 * stack_length  # 1120mm
 target_length = st.session_state['target_length']
 
 # === LENGTH OPTIMISATION FUNCTION ===
 def optimise_length(target, tier):
     """
-    Finds the best combination of boards to match or exceed the target length.
-    Professional: Uses B, C, D and adds A increments if necessary.
-    Advanced: Allows stack length A modifications.
+    Finds the best combination of boards to match or get as close as possible to the target length.
+    - Core: Uses only B, C, D.
+    - Professional: Uses B, C, D first, then adds multiple Stack A’s if needed.
+    - Advanced & Bespoke: Uses everything, including flexible Stack A.
     """
-    if tier == "Professional":
-        board_lengths = [board_d_length, board_c_length, board_b_length]
-    else:  # Advanced and Bespoke
-        board_lengths = [board_d_length, board_c_length, board_b_length, stack_length]
-
     used_boards = []
     remaining_length = target
 
+    # Core: Only uses Board B, C, D
+    if tier == "Core":
+        board_lengths = [board_d_length, board_c_length, board_b_length]
+
+    # Professional: Uses Board B, C, D first, then fills with A
+    elif tier == "Professional":
+        board_lengths = [board_d_length, board_c_length, board_b_length]
+
+    # Advanced & Bespoke: Uses everything, including flexible Stack A
+    else:
+        board_lengths = [board_d_length, board_c_length, board_b_length, stack_length]
+
+    # Primary Board Selection (B, C, D first)
     for board in board_lengths:
         while remaining_length >= board:
             used_boards.append(board)
             remaining_length -= board
 
+    # **Professional Only: Fill remaining gap with multiple A's**
     if remaining_length > 0 and tier == "Professional":
-        used_boards.append(stack_length)
+        while remaining_length >= stack_length:
+            used_boards.append(stack_length)
+            remaining_length -= stack_length
 
     return used_boards, sum(used_boards)
 
@@ -104,4 +116,4 @@ with st.expander("📋 Board Type Reference", expanded=False):
     board_df = pd.DataFrame(board_data)
     st.table(board_df)
 
-st.caption("Version 3.0 - Length Optimisation Module Implemented ✅")
+st.caption("Version 3.1 - Core & Professional Fixes ✅")
