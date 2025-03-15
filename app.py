@@ -17,7 +17,9 @@ if 'matrix_version' not in st.session_state:
 if 'advanced_unlocked' not in st.session_state:
     st.session_state['advanced_unlocked'] = False
 if 'led_scaling' not in st.session_state:
-    st.session_state['led_scaling'] = 0.0  # Default to 0%
+    st.session_state['led_scaling'] = 0.0
+if 'scaling_comment' not in st.session_state:
+    st.session_state['scaling_comment'] = ""
 
 # === SIDEBAR ===
 with st.sidebar:
@@ -25,21 +27,16 @@ with st.sidebar:
 
     with st.expander("Customisation", expanded=False):
 
-        # 1. LED Version Chip Scaling
         st.markdown("### 🔧 LED Version 'Chip Scaling' (%)")
-        scaling = st.number_input("LED Version 'Chip Scaling'",
-                                  min_value=-50.0, max_value=50.0,
-                                  value=st.session_state['led_scaling'],
-                                  step=0.1)
+        scaling = st.number_input("LED Version 'Chip Scaling'", min_value=-50.0, max_value=50.0,
+                                  value=st.session_state['led_scaling'], step=0.1)
         st.session_state['led_scaling'] = scaling
 
-        # 2. Component Lengths
         st.markdown("### Component Lengths")
         end_plate_thickness = st.number_input("End Plate Thickness (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1)
         pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
         spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
 
-        # 3. Matrix Upload / Download
         st.markdown("### 📁 Matrix Upload / Download")
         matrix_file = st.file_uploader("Upload Matrix CSV", type=["csv"])
         if matrix_file:
@@ -63,15 +60,6 @@ with st.sidebar:
             current_matrix = st.session_state['matrix_lookup']
             csv = current_matrix.to_csv(index=False).encode('utf-8')
             st.download_button("Download Matrix CSV", csv, "matrix_current.csv", "text/csv")
-
-        if st.button("Unlock Advanced Settings"):
-            st.session_state['advanced_unlocked'] = True
-            st.warning("Super Advanced Users Only: Mandatory comment required.")
-
-        if st.session_state['advanced_unlocked']:
-            comment = st.text_area("Mandatory Comment", placeholder="Explain why you are making changes")
-            if not comment:
-                st.error("Comment is mandatory to proceed with changes!")
 
 # === FILE UPLOAD ON MAIN PAGE ===
 uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
@@ -133,42 +121,39 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
-def parse_lumcat(lumcat_code, lookup_df):
-    lumcat_code = lumcat_code.strip()
+def parse_lumcat_and_lookup(header_lines, matrix_lookup):
+    lumcat_line = next((line for line in header_lines if "[LUMCAT]" in line), None)
+    if not lumcat_line:
+        return [{"Type": "LUMCAT", "Value": "Not Found"}]
 
-    diffuser_code = lumcat_code[6:8].strip()
-    wiring_code = lumcat_code[8:9].strip()
-    driver_code = lumcat_code[9:11].strip()
-    cri_code = lumcat_code[14:16].strip()
-    cct_code = lumcat_code[16:18].strip()
+    lumcat_code = lumcat_line.split(']')[-1].strip()
 
-    # Debug outputs
-    st.write("Parsed Codes:", {
-        "Diffuser": diffuser_code,
-        "Wiring": wiring_code,
-        "Driver": driver_code,
-        "CRI": cri_code,
-        "CCT": cct_code
-    })
+    prefix = lumcat_code.split('-')[0]
+    suffix = lumcat_code.split('-')[1] if '-' in lumcat_code else ""
 
-    result = []
+    # Extract segments based on agreed logic
+    diffuser_code = suffix[0:2] if len(suffix) >= 2 else ""
+    wiring_code = suffix[2:4] if len(suffix) >= 4 else ""
+    driver_code = suffix[4:6] if len(suffix) >= 6 else ""
+    cri_code = suffix[10:12] if len(suffix) >= 12 else ""
+    cct_code = suffix[12:14] if len(suffix) >= 14 else ""
 
-    if not lookup_df.empty:
-        df = lookup_df.copy()
+    # Lookup
+    df = matrix_lookup
 
-        diffuser_desc = df.loc[df['Diffuser / Louvre Code'].str.strip() == diffuser_code, 'Diffuser / Louvre Description'].values
-        wiring_desc = df.loc[df['Wiring Code'].str.strip() == wiring_code, 'Wiring Description'].values
-        driver_desc = df.loc[df['Driver Code'].str.strip() == driver_code, 'Driver Description'].values
-        cri_desc = df.loc[df['CRI Code'].str.strip() == cri_code, 'CRI Description'].values
-        cct_desc = df.loc[df['CCT/Colour Code'].str.strip() == cct_code, 'CCT/Colour Description'].values
+    diffuser_desc = df.loc[df['Diffuser / Louvre Code'] == diffuser_code, 'Diffuser / Louvre Description'].values
+    wiring_desc = df.loc[df['Wiring Code'] == wiring_code, 'Wiring Description'].values
+    driver_desc = df.loc[df['Driver Code'] == driver_code, 'Driver Description'].values
+    cri_desc = df.loc[df['CRI Code'] == cri_code, 'CRI Description'].values
+    cct_desc = df.loc[df['CCT/Colour Code'] == cct_code, 'CCT/Colour Description'].values
 
-        result.append({"Type": "Diffuser / Louvre", "Value": diffuser_desc[0] if len(diffuser_desc) else "Unknown"})
-        result.append({"Type": "Wiring", "Value": wiring_desc[0] if len(wiring_desc) else "Unknown"})
-        result.append({"Type": "Driver", "Value": driver_desc[0] if len(driver_desc) else "Unknown"})
-        result.append({"Type": "CRI", "Value": cri_desc[0] if len(cri_desc) else "Unknown"})
-        result.append({"Type": "CCT", "Value": cct_desc[0] if len(cct_desc) else "Unknown"})
-
-    return result
+    return [
+        {"Type": "Diffuser / Louvre", "Value": diffuser_desc[0] if len(diffuser_desc) else "Unknown"},
+        {"Type": "Wiring", "Value": wiring_desc[0] if len(wiring_desc) else "Unknown"},
+        {"Type": "Driver", "Value": driver_desc[0] if len(driver_desc) else "Unknown"},
+        {"Type": "CRI", "Value": cri_desc[0] if len(cri_desc) else "Unknown"},
+        {"Type": "CCT", "Value": cct_desc[0] if len(cct_desc) else "Unknown"}
+    ]
 
 # === MAIN DISPLAY ===
 if st.session_state['ies_files']:
@@ -188,15 +173,13 @@ if st.session_state['ies_files']:
     scaled_lm_per_watt = round(scaled_lumens / input_watts, 1) if input_watts > 0 else 0
     scaled_lm_per_m = round(scaled_lumens / length_m, 1) if length_m > 0 else 0
 
-    # === PARSE LUMCAT ===
-    lumcat_code = next((line.split(']')[-1].strip() for line in header_lines if "[LUMCAT]" in line), None)
-    if lumcat_code:
-        parsed_lumcat = parse_lumcat(lumcat_code, st.session_state['matrix_lookup'])
+    # === DISPLAY LOOKUP TABLE ===
+    lookup_table = parse_lumcat_and_lookup(header_lines, st.session_state['matrix_lookup'])
 
-        with st.expander("🔍 Lookup Table", expanded=False):
-            lookup_df = pd.DataFrame(parsed_lumcat)
-            st.table(lookup_df)
+    with st.expander("🔍 LUMCAT Lookup Details", expanded=False):
+        st.table(pd.DataFrame(lookup_table))
 
+    # === DISPLAY PHOTOMETRIC + METADATA ===
     with st.expander("📏 Photometric Parameters + Metadata", expanded=False):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
         st.markdown("#### IES Metadata")
@@ -204,34 +187,30 @@ if st.session_state['ies_files']:
 
         st.markdown("#### Photometric Parameters")
         photometric_data = [
-            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
-            {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm"},
-            {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f}"},
-            {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]}"},
-            {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]}"},
-            {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]}"},
-            {"Parameter": "Units Type", "Details": f"{photometric_params[6]}"},
-            {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
-            {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
-            {"Parameter": "Height", "Details": f"{photometric_params[9]:.2f} m"},
-            {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]:.1f}"},
-            {"Parameter": "Future Use", "Details": f"{photometric_params[11]}"},
-            {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"}
+            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]}"},
+            {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]}"},
+            {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]}"},
+            {"Parameter": "Input Watts", "Details": f"{input_watts} W"}
         ]
-        photometric_df = pd.DataFrame(photometric_data)
-        st.table(photometric_df)
+        st.table(pd.DataFrame(photometric_data))
 
+    # === COMPUTED BASELINE + SCALED ===
     with st.expander("✨ Computed Baseline + Scaled Values", expanded=False):
         baseline_data = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}", "Scaled": f"{scaled_lumens:.1f}"},
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}", "Scaled": f"{scaled_lm_per_watt:.1f}"},
             {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}", "Scaled": f"{scaled_lm_per_m:.1f}"}
         ]
-        baseline_df = pd.DataFrame(baseline_data)
-        st.table(baseline_df)
+        st.table(pd.DataFrame(baseline_data))
+
+        # Mandatory comment when scaling is applied
+        if st.session_state['led_scaling'] != 0.0:
+            st.session_state['scaling_comment'] = st.text_area("Mandatory Reason for LED Scaling Adjustment", value=st.session_state['scaling_comment'])
+            if not st.session_state['scaling_comment']:
+                st.warning("⚠️ Reason for scaling adjustment is mandatory.")
 
 else:
     st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 2.1f - Fixed LUMCAT Lookup, Clean UI, Advanced Sidebar Order")
+st.caption("Version 2.1f - LUMCAT Mapping & Scaling Logic Update")
