@@ -54,11 +54,16 @@ with st.sidebar:
         leds_per_pitch_set = st.number_input("LEDs per Pitch Set", min_value=1, max_value=12, value=6)
 
         st.markdown("### Component Lengths")
-        end_plate_thickness = st.number_input("End Plate Thickness (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1)
-        pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
-        spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
+        
+        # **End Plates (2x)**
+        end_plate_thickness = st.number_input("End Plates (each) (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1)
+        total_end_plate_length = end_plate_thickness * 2
 
-        # **New Field - Body Max Increment**
+        # **Smart PIR & Spitfire**
+        pir_length = st.number_input("Smart PIR (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
+        spitfire_length = st.number_input("Smart Spitfire (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
+
+        # **Body Max Increment**
         body_max_increment = st.number_input("Body Max Increment (mm)", min_value=500.0, max_value=5000.0, value=3500.0, step=0.1)
 
         st.markdown("### 🔧 LED Version 'Chip Scaling' (%)")
@@ -120,35 +125,5 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
-# === MAIN DISPLAY ===
-if st.session_state['ies_files']:
-    ies_file = st.session_state['ies_files'][0]
-    header_lines, photometric_params = parse_ies_file(ies_file['content'])
-
-    calculated_lumens = corrected_simple_lumen_calculation([], [], [], symmetry_factor=4)
-    input_watts = photometric_params[12]
-    length_m = photometric_params[8]
-
-    base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
-    base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
-
-    # === Computed Baseline + Scaled Values ===
-    scaling_factor = 1 + (st.session_state['led_scaling'] / 100)
-    scaled_lumens = round(calculated_lumens * scaling_factor, 1)
-    scaled_lm_per_watt = round(scaled_lumens / input_watts, 1) if input_watts > 0 else 0
-    scaled_lm_per_m = round(scaled_lumens / length_m, 1) if length_m > 0 else 0
-
-    with st.expander("✨ Computed Baseline + Scaled Values", expanded=False):
-        baseline_data = [
-            {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}", "Scaled": f"{scaled_lumens:.1f}"},
-            {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}", "Scaled": f"{scaled_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}", "Scaled": f"{scaled_lm_per_m:.1f}"}
-        ]
-        baseline_df = pd.DataFrame(baseline_data)
-        st.table(baseline_df)
-
-else:
-    st.info("📄 Upload your IES file to proceed.")
-
 # === FOOTER ===
-st.caption("Version 3.1 - Body Max Increment Added ✅")
+st.caption("Version 3.2 - Smart PIR, Spitfire, End Plates, Body Max Increment Added ✅")
