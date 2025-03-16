@@ -3,130 +3,88 @@ import pandas as pd
 import numpy as np
 
 # === PAGE CONFIG ===
-st.set_page_config(page_title="ECG BOM + Power Load Distribution", layout="wide")
-st.title("🚀 ECG BOM + Power Load Distribution & Luminaire Build Table")
+st.set_page_config(page_title="Luminaire Length Table Builder", layout="wide")
+st.title("🛠️ Luminaire Build Length Table")
 
 # === SESSION STATE INITIALIZATION ===
-if 'stack_length' not in st.session_state:
-    st.session_state['stack_length'] = 46.666
-if 'tier' not in st.session_state:
-    st.session_state['tier'] = "Professional"
-if 'target_length' not in st.session_state:
-    st.session_state['target_length'] = 280.0
-if 'ecg_type' not in st.session_state:
-    st.session_state['ecg_type'] = "DALI2"
-if 'ecg_custom' not in st.session_state:
-    st.session_state['ecg_custom'] = False
-if 'advanced_unlocked' not in st.session_state:
-    st.session_state['advanced_unlocked'] = False
+if 'length_table' not in st.session_state:
+    st.session_state['length_table'] = pd.DataFrame(columns=[
+        "Target Length (m)",
+        "Optimised Length (mm)",
+        "Tier",
+        "LED Chip Scaling (%) [Y]",
+        "ECG Type [E]",
+        "Boards Used",
+        "PIR Qty",
+        "Spitfire Qty",
+        "Product Code (LUMCAT)",
+        "Notes/Comments"
+    ])
 
-# === ECG Defaults ===
-ECG_WATTS = {
-    "Fixed Output": 100,
-    "DALI2": 80,
-    "Wireless DALI2": 60
-}
+# === INPUTS SECTION ===
+st.header("➕ Add New Length")
 
-# === PARAMETERS ===
-BPSL = st.session_state['stack_length']  # Base Parallel Segment Length (A)
-BODY_MAX = 3500  # mm aluminium extrusion length
-END_PLATE = 5.5  # mm per endplate
-PIR_LENGTH = BPSL if BPSL >= 30 else 30  # PIR replacement length
-SPITFIRE_LENGTH = BPSL if BPSL >= 30 else 30  # Spitfire replacement length
+# Target Length Input (m)
+target_length_m = st.number_input("Target Luminaire Length (m)", min_value=0.1, max_value=50.0, value=2.4, step=0.1)
 
-board_b_length = 6 * BPSL
-board_c_length = 12 * BPSL
-board_d_length = 24 * BPSL
-target_length = st.session_state['target_length']
+# Tier Selection
+tier = st.selectbox("Select Tier", ["Core", "Professional", "Advanced", "Bespoke"], index=1)
 
-# === ECG Power Handling ===
-ecg_choice = st.session_state['ecg_type']
-if ecg_choice == "Custom":
-    ecg_max_watt = st.number_input("Custom ECG Max Output (W)", min_value=10, max_value=500, value=100, step=1)
-else:
-    ecg_max_watt = ECG_WATTS[ecg_choice]
+# LED Chip Scaling % (from Advanced Settings) - [Y]
+led_chip_scaling = st.number_input("LED Chip Scaling (%) [Y]",
+                                   min_value=-50.0, max_value=50.0, value=15.0, step=0.1,
+                                   help="Admin Controlled: Scaling compared to base LED. Defaults to +15% Professional Gen2.")
 
-# === LENGTH OPTIMISATION ===
-def optimise_length(target, tier):
-    used_boards = []
-    remaining_length = target
-    if tier == "Core":
-        board_lengths = [board_d_length, board_c_length, board_b_length]
-    elif tier == "Professional":
-        board_lengths = [board_d_length, board_c_length, board_b_length]
+# ECG Selection [E]
+ecg_type = st.selectbox("ECG Type [E]", ["Fixed Output", "DALI2", "DALI2 Wireless", "Custom"], index=1)
+if ecg_type == "Custom":
+    ecg_reason = st.text_input("Mandatory Reason for Custom ECG Selection")
+    if not ecg_reason:
+        st.warning("Reason required for Custom ECG Type")
+
+# Ancillaries
+pir_qty = st.number_input("Qty of PIR Devices", min_value=0, max_value=10, value=0)
+spitfire_qty = st.number_input("Qty of Spitfire Devices", min_value=0, max_value=10, value=0)
+
+# === BOARD OPTIMISATION (Pulled from Optimisation Function) ===
+# For demonstration, assume function returns these:
+optimised_length_mm = round(target_length_m * 1000)  # Placeholder
+boards_used = "B + B + A + A"  # Placeholder, will be from optimise_length()
+
+# Product Code (Placeholder)
+product_code = f"PRO-{int(target_length_m*1000)}-{tier[:3].upper()}"
+
+# Notes / Comments
+notes = st.text_area("Notes / Comments", placeholder="Explain deviations or special requirements")
+
+# === ADD TO LENGTH TABLE BUTTON ===
+if st.button("✅ Add Length to Build Table"):
+    # Validation for Custom ECG Reason
+    if ecg_type == "Custom" and not ecg_reason:
+        st.error("Please provide a reason for selecting Custom ECG")
     else:
-        board_lengths = [board_d_length, board_c_length, board_b_length, BPSL]
-    for board in board_lengths:
-        while remaining_length >= board:
-            used_boards.append(board)
-            remaining_length -= board
-    if remaining_length > 0 and tier == "Professional":
-        while remaining_length >= BPSL:
-            used_boards.append(BPSL)
-            remaining_length -= BPSL
-    return used_boards, sum(used_boards)
+        new_entry = {
+            "Target Length (m)": target_length_m,
+            "Optimised Length (mm)": optimised_length_mm,
+            "Tier": tier,
+            "LED Chip Scaling (%) [Y]": led_chip_scaling,
+            "ECG Type [E]": ecg_type,
+            "Boards Used": boards_used,
+            "PIR Qty": pir_qty,
+            "Spitfire Qty": spitfire_qty,
+            "Product Code (LUMCAT)": product_code,
+            "Notes/Comments": notes if notes else "-"
+        }
+        st.session_state['length_table'] = st.session_state['length_table'].append(new_entry, ignore_index=True)
+        st.success(f"Added {target_length_m:.2f}m build to table.")
 
-selected_boards, final_length = optimise_length(target_length, st.session_state['tier'])
+# === LENGTH TABLE DISPLAY ===
+st.header("📋 Current Length Build Table")
+st.dataframe(st.session_state['length_table'], use_container_width=True)
 
-# === SEGMENT & ECG DISTRIBUTION ===
-def allocate_segments(total_length, tier, ecg_max_watt):
-    segments = []
-    current_pos = 0
-    segment_id = 1
-    while current_pos < total_length:
-        remaining = total_length - current_pos
-        segment_length = min(BODY_MAX, remaining)
-        
-        # Calculate LED Segments Per Segment
-        led_segments = int(segment_length // BPSL)
-        led_power_per_segment = 12  # Dummy value, typically derived from LED scaling
-        total_led_power = led_segments * led_power_per_segment
-        
-        # ECG Calculation
-        ecg_required = np.ceil(total_led_power / ecg_max_watt)
-        
-        segments.append({
-            "Segment ID": segment_id,
-            "Segment Length (mm)": segment_length,
-            "LED Segments": led_segments,
-            "ECG Count": ecg_required,
-            "Total Power (W)": total_led_power
-        })
-        
-        current_pos += segment_length
-        segment_id += 1
-    return segments
-
-segments_allocated = allocate_segments(final_length, st.session_state['tier'], ecg_max_watt)
-
-# === DISPLAY RESULTS ===
-st.subheader("📏 Optimised Luminaire Build Summary")
-st.write(f"**Product Tier:** `{st.session_state['tier']}`")
-st.write(f"**Base Parallel Segment Length (BPSL A):** `{BPSL:.1f}mm`")
-st.write(f"**Target Length:** `{target_length:.1f}mm`")
-st.write(f"**Optimised Length Achieved:** `{final_length:.1f}mm`")
-st.write(f"**ECG Type:** `{ecg_choice}` | **ECG Max Output:** `{ecg_max_watt}W`")
-
-# Board Breakdown
-df_boards = pd.DataFrame({"Board Lengths (mm)": selected_boards})
-st.subheader("📦 Board Selection Breakdown")
-st.table(df_boards)
-
-# Segment Allocation
-df_segments = pd.DataFrame(segments_allocated)
-st.subheader("🛠️ Segment & ECG Allocation Table")
-st.table(df_segments)
-
-# Board Reference
-with st.expander("📋 Board Type Reference", expanded=False):
-    board_data = [
-        {"Board": "Base Parallel Segment (A)", "Formula": "BPSL", "Length (mm)": f"{BPSL:.1f}"},
-        {"Board": "Board B", "Formula": "6 x A", "Length (mm)": f"{board_b_length:.1f}"},
-        {"Board": "Board C", "Formula": "12 x A", "Length (mm)": f"{board_c_length:.1f}"},
-        {"Board": "Board D", "Formula": "24 x A", "Length (mm)": f"{board_d_length:.1f}"}
-    ]
-    board_df = pd.DataFrame(board_data)
-    st.table(board_df)
+# === EXPORT TABLE ===
+csv_export = st.session_state['length_table'].to_csv(index=False).encode('utf-8')
+st.download_button("📥 Download Length Table CSV", csv_export, "length_build_table.csv", "text/csv")
 
 # === FOOTER ===
-st.caption("Version 3.2 - ECG BOM + Segment Distribution ✅")
+st.caption("Version 3.2 - Length Table Module ✅")
