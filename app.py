@@ -1,144 +1,97 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 
 # === PAGE CONFIG ===
-st.set_page_config(page_title="LED Stack-Based Length Optimisation", layout="wide")
-st.title("🔧 LED Stack-Based Length Optimisation")
+st.set_page_config(page_title="Admin Panel - Linear Lightspec Optimiser", layout="wide")
+st.title("🛠️ Admin Panel - Linear Lightspec Optimiser")
 
 # === SESSION STATE INITIALIZATION ===
-if 'stack_length' not in st.session_state:
-    st.session_state['stack_length'] = 46.666  # Default Stack A length for Professional
+if 'admin_mode' not in st.session_state:
+    st.session_state['admin_mode'] = True
 
-if 'tier' not in st.session_state:
-    st.session_state['tier'] = "Professional"  # Default to Professional
+if 'voltage' not in st.session_state:
+    st.session_state['voltage'] = 36.0
 
-if 'target_length' not in st.session_state:
-    st.session_state['target_length'] = 280.0  # Default target length
+if 'ecg_type' not in st.session_state:
+    st.session_state['ecg_type'] = "Professional (DALI-2)"
 
-if 'advanced_unlocked' not in st.session_state:
-    st.session_state['advanced_unlocked'] = False
+if 'ecg_max_output' not in st.session_state:
+    st.session_state['ecg_max_output'] = 140  # Default for DALI-2
 
-# === SIDE BAR SETTINGS ===
-with st.sidebar:
-    st.subheader("⚙️ Length Optimisation Settings")
+if 'ecg_stress_limit' not in st.session_state:
+    st.session_state['ecg_stress_limit'] = 85  # %
 
-    # Tier Selection (Core, Professional, Advanced, Bespoke)
-    st.session_state['tier'] = st.selectbox(
-        "Select Product Tier", ["Core", "Professional", "Advanced", "Bespoke"], index=1
+if 'led_stress_limit' not in st.session_state:
+    st.session_state['led_stress_limit'] = 300  # mA
+
+if 'legend_show' not in st.session_state:
+    st.session_state['legend_show'] = True
+
+# === ADMIN PANEL ===
+st.sidebar.header("🔒 Admin Mode Controls")
+st.sidebar.toggle("Admin Mode", key='admin_mode')
+
+if st.session_state['admin_mode']:
+    st.subheader("🔧 System Voltage Control")
+    st.session_state['voltage'] = st.number_input(
+        "System Voltage (V)", min_value=24.0, max_value=48.0,
+        value=st.session_state['voltage'], step=0.1,
+        help="Default 36V for SELV compliance. Changes apply system-wide."
     )
 
-    # Display Stack A length based on tier selection
-    if st.session_state['tier'] in ["Professional", "Core"]:
-        st.session_state['stack_length'] = 46.666  # Fixed Stack A in Professional and Core
+    st.subheader("⚡ ECG Configuration")
+    ecg_options = {
+        "Fixed Output": 150,
+        "DALI-2": 140,
+        "Wireless DALI-2": 120,
+        "Custom (Editable)": None
+    }
 
-    elif st.session_state['tier'] in ["Advanced", "Bespoke"]:
-        st.session_state['advanced_unlocked'] = st.checkbox("🔓 Unlock Advanced Settings")
-        if st.session_state['advanced_unlocked']:
-            st.session_state['stack_length'] = st.number_input(
-                "Custom Stack A Length (mm)", min_value=30.0, max_value=100.0,
-                value=st.session_state['stack_length'], step=0.1
-            )
+    st.session_state['ecg_type'] = st.selectbox("Select ECG Type", list(ecg_options.keys()))
 
-    # Target Length Input
-    st.session_state['target_length'] = st.number_input(
-        "Target Luminaire Length (mm)", min_value=100.0, max_value=5000.0,
-        value=st.session_state['target_length'], step=0.1
-    )
-
-    st.markdown("---")
-    st.markdown("### 🔧 Component Lengths")
-
-    # End Plates (2x)
-    end_plate_thickness = st.number_input(
-        "End Plates (each) (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1
-    )
-    total_end_plates = end_plate_thickness * 2
-    st.info(f"🔩 Total End Plate Length: `{total_end_plates:.1f} mm`")
-
-    # Smart PIR
-    pir_length = st.number_input(
-        "Smart PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1
-    )
-
-    # Smart Spitfire
-    spitfire_length = st.number_input(
-        "Smart Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1
-    )
-
-    # Body Max Increment
-    body_max_increment = st.number_input(
-        "Body Max Increment (mm)", min_value=500.0, max_value=5000.0, value=3500.0, step=0.1
-    )
-
-# === BOARD LENGTH CALCULATIONS ===
-stack_length = st.session_state['stack_length']
-board_b_length = 6 * stack_length  # 280mm default
-board_c_length = 12 * stack_length  # 560mm default
-board_d_length = 24 * stack_length  # 1120mm default
-target_length = st.session_state['target_length']
-
-# === LENGTH OPTIMISATION FUNCTION ===
-def optimise_length(target, tier):
-    """
-    Finds the best combination of boards to match or get as close as possible to the target length.
-    - Core: Uses only B, C, D.
-    - Professional: Uses B, C, D first, then adds multiple Stack A’s if needed.
-    - Advanced & Bespoke: Uses everything, including flexible Stack A.
-    """
-    used_boards = []
-    remaining_length = target
-
-    # Core: Only uses Board B, C, D
-    if tier == "Core":
-        board_lengths = [board_d_length, board_c_length, board_b_length]
-
-    # Professional: Uses Board B, C, D first, then fills with A
-    elif tier == "Professional":
-        board_lengths = [board_d_length, board_c_length, board_b_length]
-
-    # Advanced & Bespoke: Uses everything, including flexible Stack A
+    if st.session_state['ecg_type'] == "Custom (Editable)":
+        st.session_state['ecg_max_output'] = st.number_input(
+            "Custom ECG Max Output (W)", min_value=10, max_value=300,
+            value=150, step=1, help="Custom maximum output for ECG"
+        )
     else:
-        board_lengths = [board_d_length, board_c_length, board_b_length, stack_length]
+        st.session_state['ecg_max_output'] = ecg_options[st.session_state['ecg_type']]
 
-    # Primary Board Selection (B, C, D first)
-    for board in board_lengths:
-        while remaining_length >= board:
-            used_boards.append(board)
-            remaining_length -= board
+    st.session_state['ecg_stress_limit'] = st.slider(
+        "ECG Stress Loading (%)", min_value=50, max_value=100,
+        value=st.session_state['ecg_stress_limit'],
+        help="Engineering safety factor for ECG loading. Default varies by Tier."
+    )
 
-    # Professional Only: Fill remaining gap with multiple A's
-    if remaining_length > 0 and tier == "Professional":
-        while remaining_length >= stack_length:
-            used_boards.append(stack_length)
-            remaining_length -= stack_length
+    st.subheader("💡 LED Stress & Current")
+    st.session_state['led_stress_limit'] = st.slider(
+        "LED Max Current per Chip (mA)", min_value=100, max_value=400,
+        value=st.session_state['led_stress_limit'],
+        help="Defines maximum allowable LED current for product tiers."
+    )
 
-    return used_boards, sum(used_boards)
-
-# Compute the optimised board selection
-selected_boards, final_length = optimise_length(target_length, st.session_state['tier'])
-
-# === MAIN DISPLAY ===
-st.subheader("📏 Optimised Luminaire Build")
-st.write(f"**Selected Product Tier:** `{st.session_state['tier']}`")
-st.write(f"**Stack Length (A):** `{stack_length:.1f} mm`")
-st.write(f"**Target Length:** `{target_length:.1f} mm`")
-st.write(f"**Optimised Length Achieved:** `{final_length:.1f} mm`")
-
-# Display selected board breakdown
-df_boards = pd.DataFrame({"Board Lengths (mm)": selected_boards})
-st.table(df_boards)
-
-# === DISPLAY BOARD SIZES ===
-with st.expander("📋 Board Type Reference", expanded=False):
-    st.markdown("#### Board Lengths Derived from Stack A")
-    board_data = [
-        {"Board": "Stack A", "Formula": "Base Unit", "Length (mm)": f"{stack_length:.1f}"},
-        {"Board": "Board B", "Formula": "6 x A", "Length (mm)": f"{board_b_length:.1f}"},
-        {"Board": "Board C", "Formula": "12 x A", "Length (mm)": f"{board_c_length:.1f}"},
-        {"Board": "Board D", "Formula": "24 x A", "Length (mm)": f"{board_d_length:.1f}"}
+    st.subheader("📝 Defaults by Tier (Reference Table)")
+    default_data = [
+        {"Tier": "Core", "ECG Stress (%)": 100, "LED Stress (mA)": 350},
+        {"Tier": "Professional", "ECG Stress (%)": 85, "LED Stress (mA)": 300},
+        {"Tier": "Advanced", "ECG Stress (%)": 75, "LED Stress (mA)": 250},
+        {"Tier": "Bespoke", "ECG Stress (%)": "Custom", "LED Stress (mA)": "Custom"}
     ]
-    board_df = pd.DataFrame(board_data)
-    st.table(board_df)
+    default_df = pd.DataFrame(default_data)
+    st.table(default_df)
 
-st.caption("Version 3.2 - Component Lengths & Optimisation Module ✅")
+    # === LEGEND & TOOLTIP REFERENCE ===
+    if st.toggle("Show Calculation Legend", key='legend_show'):
+        st.subheader("📚 Legend - Variable Sources & Formulas (Admin View)")
+        legend_data = [
+            {"Letter": "A", "Description": "LED Stack Length", "Source": "Advanced Settings → Stack Length (mm)"},
+            {"Letter": "P", "Description": "Parallel Modules", "Source": "LED Stack Config Table"},
+            {"Letter": "S", "Description": "LEDs in Series", "Source": "LED Stack Config Table"},
+            {"Letter": "Y", "Description": "LED Chip Scaling (%)", "Source": "Advanced Settings → Chip Scaling"},
+            {"Letter": "W", "Description": "IES Input Watts", "Source": "IES File → Photometric Params Line 12"},
+            {"Letter": "L", "Description": "Total Lumens", "Source": "Computed Baseline → Line 3 Lumens"}
+        ]
+        legend_df = pd.DataFrame(legend_data)
+        st.table(legend_df)
+
+st.caption("Admin Panel v1.0 - ECG & LED Stress Controls ✅")
