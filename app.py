@@ -3,88 +3,180 @@ import pandas as pd
 import numpy as np
 
 # === PAGE CONFIG ===
-st.set_page_config(page_title="Luminaire Length Table Builder", layout="wide")
-st.title("🛠️ Luminaire Build Length Table")
+st.set_page_config(page_title="Luminaire Length Table", layout="wide")
+st.title("📏 Luminaire Length Configuration & Build Table")
 
 # === SESSION STATE INITIALIZATION ===
 if 'length_table' not in st.session_state:
     st.session_state['length_table'] = pd.DataFrame(columns=[
-        "Target Length (m)",
-        "Optimised Length (mm)",
-        "Tier",
-        "LED Chip Scaling (%) [Y]",
-        "ECG Type [E]",
-        "Boards Used",
-        "PIR Qty",
-        "Spitfire Qty",
-        "Product Code (LUMCAT)",
-        "Notes/Comments"
+        "Luminaire Length (mm)", "Tier", "Chip Scaling % (Y)", "ECG Type",
+        "PIR Qty", "Spitfire Qty", "Notes / Reason"
     ])
 
-# === INPUTS SECTION ===
-st.header("➕ Add New Length")
+if 'tier' not in st.session_state:
+    st.session_state['tier'] = "Professional"
 
-# Target Length Input (m)
-target_length_m = st.number_input("Target Luminaire Length (m)", min_value=0.1, max_value=50.0, value=2.4, step=0.1)
+if 'chip_scaling' not in st.session_state:
+    st.session_state['chip_scaling'] = 15.0  # Professional default +15%
 
-# Tier Selection
-tier = st.selectbox("Select Tier", ["Core", "Professional", "Advanced", "Bespoke"], index=1)
+if 'ecg_type' not in st.session_state:
+    st.session_state['ecg_type'] = "DALI 2 Wired"
 
-# LED Chip Scaling % (from Advanced Settings) - [Y]
-led_chip_scaling = st.number_input("LED Chip Scaling (%) [Y]",
-                                   min_value=-50.0, max_value=50.0, value=15.0, step=0.1,
-                                   help="Admin Controlled: Scaling compared to base LED. Defaults to +15% Professional Gen2.")
+if 'pir_enabled' not in st.session_state:
+    st.session_state['pir_enabled'] = True
 
-# ECG Selection [E]
-ecg_type = st.selectbox("ECG Type [E]", ["Fixed Output", "DALI2", "DALI2 Wireless", "Custom"], index=1)
-if ecg_type == "Custom":
-    ecg_reason = st.text_input("Mandatory Reason for Custom ECG Selection")
-    if not ecg_reason:
-        st.warning("Reason required for Custom ECG Type")
+if 'spitfire_enabled' not in st.session_state:
+    st.session_state['spitfire_enabled'] = True
 
-# Ancillaries
-pir_qty = st.number_input("Qty of PIR Devices", min_value=0, max_value=10, value=0)
-spitfire_qty = st.number_input("Qty of Spitfire Devices", min_value=0, max_value=10, value=0)
+# === TIER RULES TABLE ===
+TIER_RULES = {
+    "Core": {
+        "chip_scaling": 0.0,
+        "ecg_type": "Fixed Output",
+        "pir_enabled": False,
+        "spitfire_enabled": False,
+        "tooltip": "Core: 0% Chip Scaling, Fixed Output ECG, No PIR/Spitfire"
+    },
+    "Professional": {
+        "chip_scaling": 15.0,
+        "ecg_type": "DALI 2 Wired",
+        "pir_enabled": True,
+        "spitfire_enabled": True,
+        "tooltip": "Professional: +15% Chip Scaling, DALI 2 Wired ECG, PIR/Spitfire Allowed"
+    },
+    "Advanced": {
+        "chip_scaling": 0.0,
+        "ecg_type": "DALI 2 Wireless",
+        "pir_enabled": True,
+        "spitfire_enabled": True,
+        "tooltip": "Advanced: Custom Chip Scaling, DALI 2 Wireless ECG, PIR/Spitfire Allowed"
+    },
+    "Bespoke": {
+        "chip_scaling": 0.0,
+        "ecg_type": "Custom",
+        "pir_enabled": True,
+        "spitfire_enabled": True,
+        "tooltip": "Bespoke: Fully Custom Tier"
+    }
+}
 
-# === BOARD OPTIMISATION (Pulled from Optimisation Function) ===
-# For demonstration, assume function returns these:
-optimised_length_mm = round(target_length_m * 1000)  # Placeholder
-boards_used = "B + B + A + A"  # Placeholder, will be from optimise_length()
+# === TIER SELECTION ===
+st.sidebar.header("⚙️ Tier + System Settings")
 
-# Product Code (Placeholder)
-product_code = f"PRO-{int(target_length_m*1000)}-{tier[:3].upper()}"
+tier_selection = st.sidebar.selectbox(
+    label="Select Product Tier",
+    options=["Core", "Professional", "Advanced", "Bespoke"],
+    index=1,
+    help="Tier determines Chip Scaling %, ECG Type, and PIR/Spitfire availability"
+)
 
-# Notes / Comments
-notes = st.text_area("Notes / Comments", placeholder="Explain deviations or special requirements")
+tier_settings = TIER_RULES[tier_selection]
+
+# === APPLY TIER RULES ===
+st.session_state['tier'] = tier_selection
+st.session_state['chip_scaling'] = tier_settings['chip_scaling']
+st.session_state['ecg_type'] = tier_settings['ecg_type']
+st.session_state['pir_enabled'] = tier_settings['pir_enabled']
+st.session_state['spitfire_enabled'] = tier_settings['spitfire_enabled']
+
+st.sidebar.info(tier_settings['tooltip'])
+
+# === OVERRIDE CHIP SCALING ===
+custom_chip_scaling = st.sidebar.number_input(
+    label="LED Chip Scaling % (Y)",
+    min_value=-50.0, max_value=50.0, step=0.1,
+    value=st.session_state['chip_scaling'],
+    help="Alpha Ref: Y. Scaling from base IES lumens"
+)
+
+if custom_chip_scaling != st.session_state['chip_scaling']:
+    st.warning("Custom Scaling Applied: Reason Required")
+    reason_for_change = st.text_area("Mandatory Reason for Custom Scaling", key="reason_chip_scaling")
+    if reason_for_change == "":
+        st.error("Provide a reason to proceed.")
+    st.session_state['chip_scaling'] = custom_chip_scaling
+else:
+    reason_for_change = ""
+
+# === OVERRIDE ECG TYPE (Optional Custom in Advanced / Bespoke) ===
+ecg_types_available = ["Fixed Output", "DALI 2 Wired", "DALI 2 Wireless", "Custom"]
+
+ecg_selection = st.sidebar.selectbox(
+    "Select ECG Type",
+    options=ecg_types_available,
+    index=ecg_types_available.index(st.session_state['ecg_type']),
+    help="Alpha Ref: ECG Type per Tier. Overrides require Reason."
+)
+
+if ecg_selection != st.session_state['ecg_type']:
+    st.warning("Custom ECG Type Selected: Reason Required")
+    reason_for_ecg = st.text_area("Mandatory Reason for ECG Selection", key="reason_ecg_selection")
+    if reason_for_ecg == "":
+        st.error("Provide a reason to proceed.")
+    st.session_state['ecg_type'] = ecg_selection
+else:
+    reason_for_ecg = ""
+
+# === PIR & SPITFIRE QUANTITIES ===
+pir_qty = 0
+spitfire_qty = 0
+
+if st.session_state['pir_enabled']:
+    pir_qty = st.sidebar.number_input("PIR Qty", min_value=0, max_value=10, value=0, step=1)
+else:
+    st.sidebar.warning("PIR Disabled for Core Tier")
+
+if st.session_state['spitfire_enabled']:
+    spitfire_qty = st.sidebar.number_input("Spitfire Qty", min_value=0, max_value=10, value=0, step=1)
+else:
+    st.sidebar.warning("Spitfire Disabled for Core Tier")
+
+# === TARGET LENGTH INPUT ===
+target_length = st.sidebar.number_input(
+    "Enter Target Luminaire Length (mm)",
+    min_value=100.0, max_value=10000.0, step=10.0, value=2800.0,
+    help="Defines the overall luminaire length (Alpha Ref: TL)"
+)
 
 # === ADD TO LENGTH TABLE BUTTON ===
-if st.button("✅ Add Length to Build Table"):
-    # Validation for Custom ECG Reason
-    if ecg_type == "Custom" and not ecg_reason:
-        st.error("Please provide a reason for selecting Custom ECG")
-    else:
-        new_entry = {
-            "Target Length (m)": target_length_m,
-            "Optimised Length (mm)": optimised_length_mm,
-            "Tier": tier,
-            "LED Chip Scaling (%) [Y]": led_chip_scaling,
-            "ECG Type [E]": ecg_type,
-            "Boards Used": boards_used,
-            "PIR Qty": pir_qty,
-            "Spitfire Qty": spitfire_qty,
-            "Product Code (LUMCAT)": product_code,
-            "Notes/Comments": notes if notes else "-"
-        }
-        st.session_state['length_table'] = st.session_state['length_table'].append(new_entry, ignore_index=True)
-        st.success(f"Added {target_length_m:.2f}m build to table.")
+if st.sidebar.button("Add Length to Build Table"):
+    # Gather Reason Field
+    combined_reason = ""
+    if reason_for_change:
+        combined_reason += f"Chip Scaling: {reason_for_change}. "
+    if reason_for_ecg:
+        combined_reason += f"ECG Selection: {reason_for_ecg}."
 
-# === LENGTH TABLE DISPLAY ===
-st.header("📋 Current Length Build Table")
-st.dataframe(st.session_state['length_table'], use_container_width=True)
+    new_row = pd.DataFrame([{
+        "Luminaire Length (mm)": target_length,
+        "Tier": st.session_state['tier'],
+        "Chip Scaling % (Y)": st.session_state['chip_scaling'],
+        "ECG Type": st.session_state['ecg_type'],
+        "PIR Qty": pir_qty,
+        "Spitfire Qty": spitfire_qty,
+        "Notes / Reason": combined_reason
+    }])
 
-# === EXPORT TABLE ===
-csv_export = st.session_state['length_table'].to_csv(index=False).encode('utf-8')
-st.download_button("📥 Download Length Table CSV", csv_export, "length_build_table.csv", "text/csv")
+    st.session_state['length_table'] = pd.concat([st.session_state['length_table'], new_row], ignore_index=True)
+    st.success("Luminaire length added to the build table ✅")
 
-# === FOOTER ===
-st.caption("Version 3.2 - Length Table Module ✅")
+# === DISPLAY LENGTH TABLE ===
+st.subheader("📋 Luminaire Build Length Table")
+
+if st.session_state['length_table'].empty:
+    st.info("No lengths added yet.")
+else:
+    st.dataframe(st.session_state['length_table'], use_container_width=True)
+
+# === TODO APPEND ===
+st.sidebar.markdown("---")
+st.sidebar.markdown("✅ **TODO List**")
+st.sidebar.markdown("""
+- Add Base LED Chip Table for Gen1 / Gen2 scaling ✅  
+- Implement CCT Selector with Scaling Factors  
+- Link Build Table to LumCAT Generator (Placeholder added)  
+- Build Summary / BOM Output in CSV  
+- PDF Export Integration (After BOM logic finalization)
+""")
+
+st.caption("Version 3.2 - Luminaire Length Table + Tier Rule Logic ✅")
