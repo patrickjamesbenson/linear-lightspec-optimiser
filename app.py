@@ -1,187 +1,196 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import time
+import math
 
 # === PAGE CONFIG ===
-st.set_page_config(page_title="Length Optimisation Table", layout="wide")
-st.title("🛠️ Length Optimisation Table")
+st.set_page_config(page_title="Length Optimisation & Ancillary Positions", layout="wide")
+st.title("📏 Luminaire Length Optimiser + Ancillary Positions")
 
 # === SESSION STATE INITIALIZATION ===
-if 'build_table' not in st.session_state:
-    st.session_state['build_table'] = []
-
 if 'project_name' not in st.session_state:
     st.session_state['project_name'] = ""
 
-if 'tier_locked' not in st.session_state:
-    st.session_state['tier_locked'] = False
+if 'tier' not in st.session_state:
+    st.session_state['tier'] = "Professional"
 
-if 'show_alpha_labels' not in st.session_state:
-    st.session_state['show_alpha_labels'] = False
+if 'target_length' not in st.session_state:
+    st.session_state['target_length'] = 2400.0
 
-# === DEFAULT VALUES BY TIER ===
+if 'length_table' not in st.session_state:
+    st.session_state['length_table'] = pd.DataFrame(columns=[
+        "Selected Length (mm)", "Tier", "LED Chip Type", "ECG Type", "Ancillary Positions"
+    ])
+
+if 'ancillary_mode' not in st.session_state:
+    st.session_state['ancillary_mode'] = False
+
+if 'remaining_pirs' not in st.session_state:
+    st.session_state['remaining_pirs'] = 0
+
+if 'remaining_spitfires' not in st.session_state:
+    st.session_state['remaining_spitfires'] = 0
+
+if 'ancillary_positions' not in st.session_state:
+    st.session_state['ancillary_positions'] = []
+
+# === DEFAULTS PER TIER ===
 TIER_DEFAULTS = {
     "Core": {
-        "LED Scaling %": 0,
-        "ECG Type": "Fixed Output",
-        "PIR": "N/A",
-        "Spitfire": "N/A"
+        "LED Scaling": "G1 (0%)",
+        "ECG Type": "Fixed ECG",
+        "ECG Stress (%)": 100,
+        "LED Max Stress (mA)": 350,
+        "Allow Ancillaries": False
     },
     "Professional": {
-        "LED Scaling %": 15,
-        "ECG Type": "DALI-2",
-        "PIR": "Available",
-        "Spitfire": "Available"
+        "LED Scaling": "G2 (15%)",
+        "ECG Type": "DALI ECG",
+        "ECG Stress (%)": 85,
+        "LED Max Stress (mA)": 300,
+        "Allow Ancillaries": True
     },
     "Advanced": {
-        "LED Scaling %": 15,
-        "ECG Type": "DALI-2 Wireless",
-        "PIR": "Available",
-        "Spitfire": "Available"
+        "LED Scaling": "Custom",
+        "ECG Type": "Wireless ECG",
+        "ECG Stress (%)": 75,
+        "LED Max Stress (mA)": 250,
+        "Allow Ancillaries": True
     },
     "Bespoke": {
-        "LED Scaling %": 15,
-        "ECG Type": "Custom",
-        "PIR": "Available",
-        "Spitfire": "Available"
+        "LED Scaling": "Custom",
+        "ECG Type": "Custom ECG",
+        "ECG Stress (%)": 75,
+        "LED Max Stress (mA)": 250,
+        "Allow Ancillaries": True
     }
 }
 
-# === FUNCTION: Calculate Optimised Lengths ===
-def calculate_lengths(target_length, BPSL):
-    """
-    Given a target length and BPSL, calculate:
-    - Optimal (nearest buildable)
-    - Closest Shorter
-    - Closest Longer
-    """
-    # Available board lengths in mm for calculations
-    board_b = 6 * BPSL
-    board_c = 12 * BPSL
-    board_d = 24 * BPSL
-    board_lengths = [board_d, board_c, board_b, BPSL]
+# === CONSTANTS ===
+BPSL = 46.666  # Base Parallel Segment Length (mm)
+END_PLATE_LENGTH = 5.5  # mm per plate
 
-    current_length = 0
-    build = []
-    remaining = target_length
+# === PROJECT INFO ===
+st.subheader("🔧 Project Setup")
+project_name = st.text_input("Enter Project Name", st.session_state['project_name'])
+st.session_state['project_name'] = project_name
 
-    for board in board_lengths:
-        while remaining >= board:
-            build.append(board)
-            current_length += board
-            remaining -= board
+# === PRODUCT TIER SELECTION ===
+st.session_state['tier'] = st.selectbox("Select Product Tier", ["Core", "Professional", "Advanced", "Bespoke"], index=1)
 
-    # Closest Shorter is current_length
-    closest_shorter = current_length
+tier_info = TIER_DEFAULTS[st.session_state['tier']]
 
-    # Closest Longer adds another smallest board
-    closest_longer = current_length
-    if remaining > 0:
-        closest_longer += min(board_lengths)
+# === DISPLAY TIER CONFIG ===
+st.markdown(f"""
+#### Product Tier: **{st.session_state['tier']}**
+| Parameter         | Value                  |
+|-------------------|------------------------|
+| LED Chip Type     | {tier_info['LED Scaling']} |
+| ECG Type          | {tier_info['ECG Type']} |
+| ECG Stress (%)    | {tier_info['ECG Stress (%)']}% |
+| LED Max Stress    | {tier_info['LED Max Stress (mA)']}mA |
+""")
 
-    # Check for exact match
-    if abs(target_length - current_length) < 0.01:
-        optimal_text = "Optimal Achieved"
-    else:
-        optimal_text = ""
+# === TARGET LENGTH INPUT ===
+target_length_m = st.number_input(
+    label="Target Luminaire Length [m]",
+    min_value=0.100,
+    max_value=7.000,
+    step=0.001,
+    format="%.3f"
+)
+target_length_mm = target_length_m * 1000
+st.session_state['target_length'] = target_length_mm
 
-    return closest_shorter, closest_longer, optimal_text
+# === LENGTH CALCULATION ===
+def calculate_closest_lengths(target):
+    segment_count = math.floor(target / BPSL)
+    optimal_length = segment_count * BPSL
+    shorter = optimal_length if optimal_length < target else optimal_length - BPSL
+    longer = optimal_length if optimal_length >= target else optimal_length + BPSL
+    return shorter, longer, optimal_length
 
-# === MAIN INPUTS ===
-with st.expander("🔨 Project Setup", expanded=True):
-    # Project Name
-    st.session_state['project_name'] = st.text_input("Project Name (for CSV export)", value=st.session_state['project_name'])
+shorter_len, longer_len, optimal_len = calculate_closest_lengths(target_length_mm)
 
-    # Product Tier Selection
-    if not st.session_state['tier_locked']:
-        tier_selection = st.selectbox("Select Product Tier", options=["Core", "Professional", "Advanced", "Bespoke"], index=1)
-        lock_tier = st.button("Lock Tier")
-        if lock_tier:
-            st.session_state['tier'] = tier_selection
-            st.session_state['tier_locked'] = True
-            st.success(f"Tier '{tier_selection}' locked for this project.")
-    else:
-        st.info(f"✅ Product Tier Locked: {st.session_state['tier']}")
-
-    # Target Length Input (in mm)
-    target_length = st.number_input("Target Luminaire Length (mm)", min_value=100.0, max_value=10000.0, step=1.0)
-
-# === Tier Defaults ===
-selected_tier = st.session_state.get('tier', 'Professional')
-tier_config = TIER_DEFAULTS[selected_tier]
-BPSL = 46.666 if selected_tier in ['Core', 'Professional'] else 46.666  # Can update from advanced settings
-
-# === CALCULATE LENGTH OPTIONS ===
-shorter, longer, optimal_flag = calculate_lengths(target_length, BPSL)
-
-# === BUTTONS ===
-col1, col2, col3 = st.columns(3)
-
-if optimal_flag:
-    with col2:
-        if st.button("✅ Optimal Build"):
-            st.session_state['build_table'].append({
-                "Project Name": st.session_state['project_name'],
-                "Target Length (mm)": target_length,
-                "Optimised Length (mm)": target_length,
-                "Tier": selected_tier,
-                "LED Scaling %": tier_config['LED Scaling %'],
-                "ECG Type": tier_config['ECG Type'],
-                "PIR": tier_config['PIR'],
-                "Spitfire": tier_config['Spitfire'],
-                "Timestamp": time.time()
-            })
+# === BUILD BUTTONS ===
+st.subheader("📐 Length Optimisation Options")
+if optimal_len == target_length_mm:
+    if st.button(f"Optimal Length {optimal_len:.1f}mm"):
+        selected_length = optimal_len
 else:
+    col1, col2 = st.columns(2)
     with col1:
-        if st.button("⬅️ Closest Shorter"):
-            st.session_state['build_table'].append({
-                "Project Name": st.session_state['project_name'],
-                "Target Length (mm)": target_length,
-                "Optimised Length (mm)": shorter,
-                "Tier": selected_tier,
-                "LED Scaling %": tier_config['LED Scaling %'],
-                "ECG Type": tier_config['ECG Type'],
-                "PIR": tier_config['PIR'],
-                "Spitfire": tier_config['Spitfire'],
-                "Timestamp": time.time()
-            })
-    with col3:
-        if st.button("➡️ Closest Longer"):
-            st.session_state['build_table'].append({
-                "Project Name": st.session_state['project_name'],
-                "Target Length (mm)": target_length,
-                "Optimised Length (mm)": longer,
-                "Tier": selected_tier,
-                "LED Scaling %": tier_config['LED Scaling %'],
-                "ECG Type": tier_config['ECG Type'],
-                "PIR": tier_config['PIR'],
-                "Spitfire": tier_config['Spitfire'],
-                "Timestamp": time.time()
-            })
+        if st.button(f"Closest Shorter Length {shorter_len:.1f}mm"):
+            selected_length = shorter_len
+    with col2:
+        if st.button(f"Closest Longer Length {longer_len:.1f}mm"):
+            selected_length = longer_len
 
-# === BUILD TABLE DISPLAY ===
-if st.session_state['build_table']:
-    st.subheader("📋 Length Build Table")
-    df_builds = pd.DataFrame(st.session_state['build_table'])
-    st.table(df_builds)
+# === ADD LENGTH TO TABLE ===
+def add_length_to_table(length_mm):
+    new_row = {
+        "Selected Length (mm)": round(length_mm, 1),
+        "Tier": st.session_state['tier'],
+        "LED Chip Type": tier_info['LED Scaling'],
+        "ECG Type": tier_info['ECG Type'],
+        "Ancillary Positions": ""  # To be populated
+    }
+    st.session_state['length_table'] = pd.concat([st.session_state['length_table'], pd.DataFrame([new_row])], ignore_index=True)
 
-    # CSV Export
-    csv_file = df_builds.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download CSV", data=csv_file, file_name=f"{st.session_state['project_name']}_length_builds.csv", mime='text/csv')
+if 'selected_length' in locals():
+    add_length_to_table(selected_length)
 
-# === ADMIN PANEL ===
-with st.expander("🛠️ Admin Controls", expanded=False):
-    st.markdown("### Tier Defaults Setup")
-    selected_tier_admin = st.selectbox("Edit Tier Defaults", options=list(TIER_DEFAULTS.keys()))
+# === DISPLAY LENGTH BUILD TABLE ===
+st.subheader("📊 Luminaire Length Build Table")
+st.dataframe(st.session_state['length_table'])
 
-    for key in ["LED Scaling %", "ECG Type", "PIR", "Spitfire"]:
-        new_value = st.text_input(f"{selected_tier_admin} - {key}", value=str(TIER_DEFAULTS[selected_tier_admin][key]))
-        TIER_DEFAULTS[selected_tier_admin][key] = new_value
+# === ANCILLARY POSITION ASSISTANT ===
+if tier_info['Allow Ancillaries']:
+    with st.expander("🔧 Ancillary Position Assistant", expanded=False):
+        pir_count = st.number_input("Number of PIRs", min_value=0, step=1)
+        spitfire_count = st.number_input("Number of Spitfires", min_value=0, step=1)
 
-    st.session_state['show_alpha_labels'] = st.checkbox("🔡 Show Alpha Labels in UI")
-    if st.session_state['show_alpha_labels']:
-        st.info("Alpha Labels enabled for all values.")
+        if pir_count > 0 or spitfire_count > 0:
+            if st.button("Begin Ancillary Position Assignment"):
+                st.session_state['remaining_pirs'] = pir_count
+                st.session_state['remaining_spitfires'] = spitfire_count
+                st.session_state['ancillary_mode'] = True
+                st.session_state['ancillary_positions'] = []
+
+# === ANCILLARY POSITION INPUT ===
+def process_ancillaries():
+    total_segments = math.floor(selected_length / BPSL)
+    st.info(f"Total Segments Available: {total_segments}")
+
+    # PIR Handling
+    if st.session_state['remaining_pirs'] > 0:
+        pir_index = pir_count - st.session_state['remaining_pirs'] + 1
+        pir_pos = st.number_input(f"Enter position (mm) for PIR {pir_index}", min_value=0.0, max_value=selected_length, step=1.0)
+        segment_no = math.ceil(pir_pos / BPSL)
+        if st.button(f"Confirm PIR {pir_index} at Segment {segment_no}"):
+            st.session_state['ancillary_positions'].append(f"PIR-{pir_index}/{segment_no}")
+            st.session_state['remaining_pirs'] -= 1
+
+    # Spitfire Handling
+    elif st.session_state['remaining_spitfires'] > 0:
+        spitfire_index = spitfire_count - st.session_state['remaining_spitfires'] + 1
+        spitfire_pos = st.number_input(f"Enter position (mm) for Spitfire {spitfire_index}", min_value=0.0, max_value=selected_length, step=1.0)
+        segment_no = math.ceil(spitfire_pos / BPSL)
+        if st.button(f"Confirm Spitfire {spitfire_index} at Segment {segment_no}"):
+            st.session_state['ancillary_positions'].append(f"SPITFIRE-{spitfire_index}/{segment_no}")
+            st.session_state['remaining_spitfires'] -= 1
+
+    # Finish and Update Table
+    if st.session_state['remaining_pirs'] == 0 and st.session_state['remaining_spitfires'] == 0:
+        st.success("All Ancillaries Positioned!")
+        ancillary_col = " | ".join(st.session_state['ancillary_positions'])
+
+        # Update the ancillary column in the length table
+        idx = st.session_state['length_table'].index[-1]
+        st.session_state['length_table'].at[idx, "Ancillary Positions"] = ancillary_col
+        st.session_state['ancillary_mode'] = False
+
+if st.session_state['ancillary_mode']:
+    process_ancillaries()
 
 # === FOOTER ===
-st.caption("Version 3.2 - Length Optimisation Table ✅")
+st.caption("Version 3.3 - Length Optimisation + Ancillary Positions + Tier-Based Defaults")
