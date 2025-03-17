@@ -1,195 +1,50 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import time
+from utils import parse_ies_file, modify_candela_data, create_ies_file, create_zip
 
-# === PAGE CONFIG ===
-st.set_page_config(page_title="IES Metadata & Baseline Lumen Calculator", layout="wide")
-st.title("IES Metadata & Computed Baseline Display")
+st.set_page_config(page_title="Linear LightSpec Optimiser", layout="wide")
 
-# === SESSION STATE INITIALIZATION ===
-if 'ies_files' not in st.session_state:
-    st.session_state['ies_files'] = []
+def splash_screen():
+    st.image("assets/splash_screen.png", use_column_width=True)
+    st.markdown("<h1 style='text-align: center;'>Evolt - So much more than light</h1>", unsafe_allow_html=True)
 
-if 'matrix_version' not in st.session_state:
-    st.session_state['matrix_version'] = []
+# Splash Screen
+if "splash" not in st.session_state:
+    splash_screen()
+    st.session_state["splash"] = True
 
-# === FILE UPLOAD ===
-uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
+# File Upload Section
+st.title("Linear LightSpec Optimiser")
+uploaded_file = st.file_uploader("Upload IES File", type=["ies"])
 
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
-    st.session_state['ies_files'] = [{
-        'name': uploaded_file.name,
-        'content': file_content
-    }]
+    parsed = parse_ies_file(file_content)
 
-# === FUNCTION DEFINITIONS ===
-def parse_ies_file(file_content):
-    lines = file_content.splitlines()
-    header_lines = []
-    tilt_line = ''
-    data_lines = []
-    reading_data = False
+    st.subheader("Base File Summary")
+    st.text(f"Header Lines: {len(parsed['header'])}")
+    st.text(f"Data Lines: {len(parsed['data'])}")
 
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("TILT"):
-            tilt_line = stripped
-            reading_data = True
-        elif not reading_data:
-            header_lines.append(stripped)
-        else:
-            data_lines.append(stripped)
+    # Efficiency Gain Input
+    efficiency_gain_percent = st.number_input("LED Efficiency Gain (%)", min_value=-50.0, max_value=100.0, value=0.0, step=1.0)
+    reason = st.text_input("Reason for Efficiency Gain", value="Gen 2 LED +15% increase lumen output")
 
-    photometric_raw = " ".join(data_lines[:2]).split()
-    photometric_params = [float(x) if '.' in x or 'e' in x.lower() else int(x) for x in photometric_raw]
-    n_vert = int(photometric_params[3])
-    n_horz = int(photometric_params[4])
+    # Length Selection
+    target_length_m = st.number_input("Select Target Length (m)", min_value=0.5, max_value=10.0, value=1.0, step=0.1)
 
-    remaining_data = " ".join(data_lines[2:]).split()
-    vertical_angles = [float(x) for x in remaining_data[:n_vert]]
-    horizontal_angles = [float(x) for x in remaining_data[n_vert:n_vert + n_horz]]
+    # Modify Data
+    efficiency_multiplier = 1 + (efficiency_gain_percent / 100)
+    modified_data = modify_candela_data(parsed['data'], efficiency_multiplier)
 
-    candela_values = remaining_data[n_vert + n_horz:]
-    candela_matrix = []
-    idx = 0
-    for _ in range(n_horz):
-        row = [float(candela_values[idx + i]) for i in range(n_vert)]
-        candela_matrix.append(row)
-        idx += n_vert
+    # New IES content
+    new_ies_content = create_ies_file(parsed['header'], modified_data)
 
-    return header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix
-
-def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix, symmetry_factor=4):
-    vert_rad = np.radians(vertical_angles)
-    delta_vert = np.diff(vert_rad)
-    delta_vert = np.append(delta_vert, delta_vert[-1])
-
-    symmetry_range_rad = np.radians(horizontal_angles[-1] - horizontal_angles[0])
-    num_horz_segments = len(horizontal_angles)
-    uniform_delta_horz = symmetry_range_rad / num_horz_segments
-
-    total_flux = 0.0
-    for h_idx in range(num_horz_segments):
-        candela_row = candela_matrix[h_idx]
-        for v_idx, cd in enumerate(candela_row):
-            theta = vert_rad[v_idx]
-            d_theta = delta_vert[v_idx]
-            flux = cd * np.sin(theta) * d_theta * uniform_delta_horz
-            total_flux += flux
-
-    return round(total_flux * symmetry_factor, 1)
-
-# === PLACEHOLDER LOOKUP MATRIX ===
-def get_matrix_lookup():
-    return {
-        'Option': 'No Special Option',
-        'Diffuser': 'None',
-        'Driver': 'Standard Fixed Output Driver',
-        'Wiring': 'Hardwired',
-        'CRI': '90',
-        'CCT': '4000K'
+    st.subheader("Download Files")
+    files_to_download = {
+        f"Optimised_{target_length_m}m.ies": new_ies_content
     }
 
-# === MATRIX FILE MANAGEMENT ===
-def download_matrix_template():
-    df_template = pd.DataFrame({
-        'Option Code': ['NS'],
-        'Option Description': ['No Special Option'],
-        'Diffuser Code': ['AA'],
-        'Diffuser Description': ['None'],
-        'Driver Code': ['AA'],
-        'Driver Description': ['Standard Fixed Output Driver'],
-        'Wiring Code': ['A'],
-        'Wiring Description': ['Hardwired'],
-        'Dimensions Code': ['AA'],
-        'Dimensions Description': ['265mm x 265mm'],
-        'CRI Code': ['80'],
-        'CRI Description': ['80'],
-        'CCT Code': ['27'],
-        'CCT Description': ['2700K']
-    })
-    return df_template
+    zip_buffer = create_zip(files_to_download)
+    st.download_button("Download Optimised IES ZIP", zip_buffer, file_name="Optimised_IES_Files.zip")
 
-st.sidebar.markdown("### Matrix Download/Upload")
-if st.sidebar.button("Download Matrix Template"):
-    csv = download_matrix_template().to_csv(index=False).encode('utf-8')
-    st.sidebar.download_button(
-        label="Download Template CSV",
-        data=csv,
-        file_name='matrix_template.csv',
-        mime='text/csv'
-    )
-
-uploaded_matrix = st.sidebar.file_uploader("Upload Updated Matrix CSV", type=["csv"])
-
-if uploaded_matrix:
-    st.session_state['matrix_lookup'] = pd.read_csv(uploaded_matrix)
-    version_time = int(time.time())
-    st.session_state['matrix_version'].append(version_time)
-    st.sidebar.success(f"Matrix updated successfully! Version: {version_time}")
-
-# === PROCESS AND DISPLAY FILE ===
-if st.session_state['ies_files']:
-    ies_file = st.session_state['ies_files'][0]
-
-    header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(ies_file['content'])
-
-    calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
-    input_watts = photometric_params[12]
-    length_m = photometric_params[8]
-
-    calculated_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
-    calculated_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
-
-    # === DISPLAY COMPUTED BASELINE ===
-    with st.expander("✨ Computed Baseline Data", expanded=False):
-        baseline_data = [
-            {"Description": "Total Lumens", "Value": calculated_lumens},
-            {"Description": "Efficacy (lm/W)", "Value": calculated_lm_per_watt},
-            {"Description": "Lumens per Meter", "Value": calculated_lm_per_m},
-        ]
-        baseline_df = pd.DataFrame(baseline_data)
-        st.table(baseline_df.style.format({"Value": "{:.1f}"}))
-
-    # === DISPLAY IES METADATA ===
-    with st.expander("📄 IES Metadata", expanded=False):
-        meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
-        st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
-
-    # === DISPLAY PHOTOMETRIC PARAMETERS ===
-    with st.expander("📐 Photometric Parameters", expanded=False):
-        photometric_data = [
-            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
-            {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm (absolute photometry)" if photometric_params[1] < 0 else f"{photometric_params[1]} lm"},
-            {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f} (multiplier applied to candela values)"},
-            {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]} vertical angles measured"},
-            {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]} horizontal planes"},
-            {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]} (Type C)" if photometric_params[5] == 1 else f"{photometric_params[5]} (Other)"},
-            {"Parameter": "Units Type", "Details": f"{photometric_params[6]} (Meters)" if photometric_params[6] == 2 else f"{photometric_params[6]} (Feet)"},
-            {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
-            {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
-            {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]:.1f}"},
-            {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"},
-        ]
-        photometric_df = pd.DataFrame(photometric_data)
-        st.table(photometric_df)
-
-    # === DISPLAY MATRIX LOOKUP DETAILS ===
-    matrix_info = get_matrix_lookup()
-
-    with st.expander("🔎 Matrix Details", expanded=False):
-        matrix_data = [
-            {"Description": "Option", "Value": matrix_info['Option']},
-            {"Description": "Diffuser", "Value": matrix_info['Diffuser']},
-            {"Description": "Driver", "Value": matrix_info['Driver']},
-            {"Description": "Wiring", "Value": matrix_info['Wiring']},
-            {"Description": "CRI", "Value": matrix_info['CRI']},
-            {"Description": "CCT", "Value": matrix_info['CCT']}
-        ]
-        matrix_df = pd.DataFrame(matrix_data)
-        st.table(matrix_df)
-
-else:
-    st.warning("Please upload an IES file to proceed.")
+    st.success("Optimisation complete! Download your IES files.")
