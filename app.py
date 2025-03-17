@@ -201,8 +201,7 @@ photometric_df = pd.DataFrame(photometric_table)
 
 st.table(photometric_df)
 
-
-       st.markdown("#### Base Values")
+        st.markdown("#### Base Values")
         base_values = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
