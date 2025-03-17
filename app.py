@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import time
 import os
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
-st.title("Linear Lightspec Optimiser v4.7 Clean")
+st.title("Linear Lightspec Optimiser v4.6 Alpha Clean")
 
 # === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
@@ -18,9 +19,9 @@ default_matrix_path = "Matrix Headers.csv"
 if os.path.exists(default_matrix_path):
     st.session_state['matrix_lookup'] = pd.read_csv(default_matrix_path)
 else:
-    st.warning("⚠️ Matrix file not found! Please upload manually.")
+    st.warning("⚠️ Default matrix file not found! Please upload manually.")
 
-# === SIDEBAR: MATRIX UPLOAD ===
+# === SIDEBAR ===
 with st.sidebar:
     st.subheader("📁 Matrix Upload / Download")
 
@@ -39,13 +40,18 @@ with st.sidebar:
         else:
             st.error("❌ Matrix upload failed: Missing required columns.")
 
-    # === One-click download ===
     st.download_button(
         label="⬇️ Download Current Matrix CSV",
         data=st.session_state['matrix_lookup'].to_csv(index=False).encode('utf-8'),
         file_name="matrix_current.csv",
         mime="text/csv"
     )
+
+# === FILE UPLOAD: IES FILE ===
+uploaded_file = st.file_uploader("📄 Upload your IES file", type=["ies"])
+if uploaded_file:
+    file_content = uploaded_file.read().decode('utf-8')
+    st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
 
 # === PARSE FUNCTIONS ===
 def parse_ies_file(file_content):
@@ -100,6 +106,7 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
+# === LUMCAT PARSE FUNCTIONS ===
 def parse_lumcat(lumcat_code):
     try:
         range_code, rest = lumcat_code.split('-')
@@ -123,6 +130,7 @@ def parse_lumcat(lumcat_code):
             "CRI Code": cri_code,
             "CCT Code": cct_code
         }
+
     except Exception as e:
         st.error(f"Error parsing LUMCAT: {e}")
         return None
@@ -132,8 +140,8 @@ def lookup_lumcat_descriptions(parsed_codes, matrix_df):
         return None
 
     result = {}
-
     result['Range'] = parsed_codes['Range']
+
     option_match = matrix_df.loc[matrix_df['Option Code'] == parsed_codes['Option Code']]
     diffuser_match = matrix_df.loc[matrix_df['Diffuser / Louvre Code'] == parsed_codes['Diffuser Code']]
     wiring_match = matrix_df.loc[matrix_df['Wiring Code'] == parsed_codes['Wiring Code']]
@@ -152,11 +160,6 @@ def lookup_lumcat_descriptions(parsed_codes, matrix_df):
     return result
 
 # === MAIN DISPLAY ===
-uploaded_file = st.file_uploader("📄 Upload your IES file", type=["ies"])
-if uploaded_file:
-    file_content = uploaded_file.read().decode('utf-8')
-    st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
-
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
     header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(
@@ -169,38 +172,33 @@ if st.session_state['ies_files']:
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    lumcat_code = next((line.split(']')[-1].strip() for line in header_lines if 'LUMCAT' in line), None)
-    parsed_codes = parse_lumcat(lumcat_code) if lumcat_code else None
-    lumcat_descriptions = lookup_lumcat_descriptions(parsed_codes, st.session_state['matrix_lookup'])
-
+    # === DISPLAY DATA ===
     with st.expander("📏 Photometric Parameters + Metadata + Base Values", expanded=False):
+        # === IES Metadata ===
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
         st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-      # === Photometric Parameters ===
-st.markdown("#### Photometric Parameters")
+        # === Photometric Parameters (fixed layout) ===
+        st.markdown("#### Photometric Parameters")
+        photometric_table = [
+            {"Param": "A", "Description": "Lamps", "Value": f"{photometric_params[0]}"},
+            {"Param": "B", "Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
+            {"Param": "C", "Description": "Candela Mult.", "Value": f"{photometric_params[2]}"},
+            {"Param": "D", "Description": "Vert Angles", "Value": f"{photometric_params[3]}"},
+            {"Param": "E", "Description": "Horiz Angles", "Value": f"{photometric_params[4]}"},
+            {"Param": "F", "Description": "Photometric Type", "Value": f"{photometric_params[5]}"},
+            {"Param": "G", "Description": "Units Type", "Value": f"{photometric_params[6]}"},
+            {"Param": "H", "Description": "Width (m)", "Value": f"{photometric_params[7]}"},
+            {"Param": "I", "Description": "Length (m)", "Value": f"{photometric_params[8]}"},
+            {"Param": "J", "Description": "Height (m)", "Value": f"{photometric_params[9]}"},
+            {"Param": "K", "Description": "Ballast Factor", "Value": f"{photometric_params[10]}"},
+            {"Param": "L", "Description": "Future Use", "Value": f"{photometric_params[11]}"},
+            {"Param": "M", "Description": "Input Watts [F]", "Value": f"{photometric_params[12]}"}
+        ]
+        st.table(pd.DataFrame(photometric_table))
 
-photometric_table = [
-    {"Param": "A", "Description": "Lamps", "Value": f"{photometric_params[0]}"},
-    {"Param": "B", "Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
-    {"Param": "C", "Description": "Candela Mult.", "Value": f"{photometric_params[2]}"},
-    {"Param": "D", "Description": "Vert Angles", "Value": f"{photometric_params[3]}"},
-    {"Param": "E", "Description": "Horiz Angles", "Value": f"{photometric_params[4]}"},
-    {"Param": "F", "Description": "Photometric Type", "Value": f"{photometric_params[5]}"},
-    {"Param": "G", "Description": "Units Type", "Value": f"{photometric_params[6]}"},
-    {"Param": "H", "Description": "Width (m)", "Value": f"{photometric_params[7]}"},
-    {"Param": "I", "Description": "Length (m)", "Value": f"{photometric_params[8]}"},
-    {"Param": "J", "Description": "Height (m)", "Value": f"{photometric_params[9]}"},
-    {"Param": "K", "Description": "Ballast Factor", "Value": f"{photometric_params[10]}"},
-    {"Param": "L", "Description": "Future Use", "Value": f"{photometric_params[11]}"},
-    {"Param": "M", "Description": "Input Watts [F]", "Value": f"{photometric_params[12]}"}
-]
-
-photometric_df = pd.DataFrame(photometric_table)
-
-st.table(photometric_df)
-
+        # === Base Values ===
         st.markdown("#### Base Values")
         base_values = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
@@ -211,12 +209,18 @@ st.table(photometric_df)
         ]
         st.table(pd.DataFrame(base_values))
 
-        if lumcat_descriptions:
-            st.markdown("#### LumCAT Reverse Lookup (from Matrix)")
-            desc_df = pd.DataFrame(lumcat_descriptions.items(), columns=["Field", "Value"])
-            st.table(desc_df)
+        # === LumCAT Reverse Lookup ===
+        st.markdown("#### LumCAT Reverse Lookup (Matrix)")
+        lumcat_code = meta_dict.get("[LUMCAT]", "")
+        parsed_codes = parse_lumcat(lumcat_code) if lumcat_code else None
+        description_result = lookup_lumcat_descriptions(parsed_codes, st.session_state['matrix_lookup'])
+        if description_result:
+            st.table(pd.DataFrame(description_result.items(), columns=["Field", "Value"]))
+        else:
+            st.info("⚠️ No valid LumCAT code found or Matrix not loaded.")
+
 else:
     st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 4.7 Clean - Unified Base Info + Matrix + Tooltips ✅")
+st.caption("Version 4.6 Alpha Clean - Unified Base Info + Matrix + Tooltips ✅")
