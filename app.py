@@ -117,13 +117,15 @@ if uploaded_file:
     st.table(photometric_df)
 
     st.markdown("## ✨ Computed Baseline Values")
+
     # Tool tip for G1
     st.markdown("#### Base LED Chip: `G1` ℹ️ (TM30 report xxx)")
 
     baseline_data = [
         {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
         {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
-        {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"}
+        {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
+        {"Description": "Base Design", "LED Base": "6S/4P/14.4W/400mA/36V/5K/80/280/G1/DR12w"}
     ]
     baseline_df = pd.DataFrame(baseline_data)
     st.table(baseline_df)
