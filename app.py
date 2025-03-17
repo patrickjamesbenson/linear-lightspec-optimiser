@@ -15,7 +15,7 @@ if 'matrix_lookup' not in st.session_state:
     st.session_state['matrix_lookup'] = pd.DataFrame()
 
 # === DEFAULT MATRIX AUTO-LOAD ===
-default_matrix_path = "Matrix Headers.csv"  # Root of app directory
+default_matrix_path = "Matrix Headers.csv"
 if os.path.exists(default_matrix_path):
     st.session_state['matrix_lookup'] = pd.read_csv(default_matrix_path)
     st.success("✅ Default Matrix Loaded.")
@@ -42,9 +42,13 @@ with st.sidebar:
         else:
             st.error("❌ Matrix upload failed: Missing required columns.")
 
-    if st.button("Download Current Matrix CSV"):
-        csv = st.session_state['matrix_lookup'].to_csv(index=False).encode('utf-8')
-        st.download_button("Download Matrix CSV", csv, "matrix_current.csv", "text/csv")
+    # === Single-click download ===
+    st.download_button(
+        label="⬇️ Download Current Matrix CSV",
+        data=st.session_state['matrix_lookup'].to_csv(index=False).encode('utf-8'),
+        file_name="matrix_current.csv",
+        mime="text/csv"
+    )
 
 # === FILE UPLOAD: IES FILE ===
 uploaded_file = st.file_uploader("📄 Upload your IES file", type=["ies"])
@@ -127,9 +131,19 @@ if st.session_state['ies_files']:
 
         st.markdown("#### Photometric Parameters")
         photometric_data = [
-            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s)"},
+            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]}"},
             {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm"},
-            {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"},
+            {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]}"},
+            {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]}"},
+            {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]}"},
+            {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]}"},
+            {"Parameter": "Units Type", "Details": f"{photometric_params[6]}"},
+            {"Parameter": "Width", "Details": f"{photometric_params[7]} m"},
+            {"Parameter": "Length", "Details": f"{photometric_params[8]} m"},
+            {"Parameter": "Height", "Details": f"{photometric_params[9]} m"},
+            {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]}"},
+            {"Parameter": "Future Use", "Details": f"{photometric_params[11]}"},
+            {"Parameter": "Input Watts", "Details": f"{photometric_params[12]} W"},
         ]
         st.table(pd.DataFrame(photometric_data))
 
@@ -139,7 +153,7 @@ if st.session_state['ies_files']:
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
             {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
             {"Description": "Base LED Chip", "LED Base": "G1 (Gen1 Spec: per TM30 Report XXX)"},
-            {"Description": "Base Design", "LED Base": "6S/4P/14.4W/400mA/G1/DR12w"},
+            {"Description": "Base Design", "LED Base": "6S/4P/14.4W/280/400mA/G1/DR12w"}
         ]
         st.table(pd.DataFrame(base_values))
 
@@ -147,4 +161,4 @@ else:
     st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 4.1 - Base Values Clean & Matrix Load ✅")
+st.caption("Version 4.2 - Base Values Refined + Matrix Handling ✅")
