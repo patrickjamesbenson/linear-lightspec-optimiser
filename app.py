@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
-import math
+import numpy as np
+import time
 
 # === PAGE CONFIG ===
-st.set_page_config(page_title="Length Optimisation & Ancillary Positions", layout="wide")
-st.title("📏 Luminaire Length Optimiser + Ancillary Positions")
+st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
+st.title("🔧 Linear Lightspec Optimiser v4.0 Alpha")
 
 # === SESSION STATE INITIALIZATION ===
 if 'project_name' not in st.session_state:
@@ -13,184 +14,154 @@ if 'project_name' not in st.session_state:
 if 'tier' not in st.session_state:
     st.session_state['tier'] = "Professional"
 
-if 'target_length' not in st.session_state:
-    st.session_state['target_length'] = 2400.0
+if 'led_scaling' not in st.session_state:
+    st.session_state['led_scaling'] = 15.0  # Default for Professional
 
-if 'length_table' not in st.session_state:
-    st.session_state['length_table'] = pd.DataFrame(columns=[
-        "Selected Length (mm)", "Tier", "LED Chip Type", "ECG Type", "Ancillary Positions"
-    ])
+if 'ecg_type' not in st.session_state:
+    st.session_state['ecg_type'] = "DALI2"
 
-if 'ancillary_mode' not in st.session_state:
-    st.session_state['ancillary_mode'] = False
-
-if 'remaining_pirs' not in st.session_state:
-    st.session_state['remaining_pirs'] = 0
-
-if 'remaining_spitfires' not in st.session_state:
-    st.session_state['remaining_spitfires'] = 0
+if 'project_lengths' not in st.session_state:
+    st.session_state['project_lengths'] = []
 
 if 'ancillary_positions' not in st.session_state:
-    st.session_state['ancillary_positions'] = []
+    st.session_state['ancillary_positions'] = {}
 
-# === DEFAULTS PER TIER ===
-TIER_DEFAULTS = {
-    "Core": {
-        "LED Scaling": "G1 (0%)",
-        "ECG Type": "Fixed ECG",
-        "ECG Stress (%)": 100,
-        "LED Max Stress (mA)": 350,
-        "Allow Ancillaries": False
-    },
-    "Professional": {
-        "LED Scaling": "G2 (15%)",
-        "ECG Type": "DALI ECG",
-        "ECG Stress (%)": 85,
-        "LED Max Stress (mA)": 300,
-        "Allow Ancillaries": True
-    },
-    "Advanced": {
-        "LED Scaling": "Custom",
-        "ECG Type": "Wireless ECG",
-        "ECG Stress (%)": 75,
-        "LED Max Stress (mA)": 250,
-        "Allow Ancillaries": True
-    },
-    "Bespoke": {
-        "LED Scaling": "Custom",
-        "ECG Type": "Custom ECG",
-        "ECG Stress (%)": 75,
-        "LED Max Stress (mA)": 250,
-        "Allow Ancillaries": True
-    }
+# === ALPHA CODES ===
+ALPHA = {
+    "F": "Watts (Photometric Params Line 8)",
+    "Y": "LED Scaling % (Advanced Settings)",
+    "A": "LED in Series Length mm (Board Config)",
+    "S": "Series Count",
+    "P": "Parallel Count",
+    "W": "ECG Max Watt Output",
 }
 
-# === CONSTANTS ===
-BPSL = 46.666  # Base Parallel Segment Length (mm)
-END_PLATE_LENGTH = 5.5  # mm per plate
+# === TIER DEFAULTS ===
+TIER_DEFAULTS = {
+    "Core": {"LED Scaling": 0, "ECG Stress": 100, "LED Stress": 350, "ECG Type": "Fixed Output"},
+    "Professional": {"LED Scaling": 15, "ECG Stress": 85, "LED Stress": 300, "ECG Type": "DALI2"},
+    "Advanced": {"LED Scaling": 15, "ECG Stress": 75, "LED Stress": 250, "ECG Type": "Wireless"},
+    "Bespoke": {"LED Scaling": 0, "ECG Stress": 75, "LED Stress": 250, "ECG Type": "Custom"}
+}
 
-# === PROJECT INFO ===
-st.subheader("🔧 Project Setup")
-project_name = st.text_input("Enter Project Name", st.session_state['project_name'])
-st.session_state['project_name'] = project_name
+# === PROJECT SETUP ===
+st.sidebar.subheader("📁 Project Setup")
 
-# === PRODUCT TIER SELECTION ===
-st.session_state['tier'] = st.selectbox("Select Product Tier", ["Core", "Professional", "Advanced", "Bespoke"], index=1)
+st.session_state['project_name'] = st.sidebar.text_input("Enter Project Name", st.session_state['project_name'])
 
-tier_info = TIER_DEFAULTS[st.session_state['tier']]
+# Product Tier Selection
+st.session_state['tier'] = st.sidebar.selectbox("Select Product Tier", list(TIER_DEFAULTS.keys()), index=1)
 
-# === DISPLAY TIER CONFIG ===
-st.markdown(f"""
-#### Product Tier: **{st.session_state['tier']}**
-| Parameter         | Value                  |
-|-------------------|------------------------|
-| LED Chip Type     | {tier_info['LED Scaling']} |
-| ECG Type          | {tier_info['ECG Type']} |
-| ECG Stress (%)    | {tier_info['ECG Stress (%)']}% |
-| LED Max Stress    | {tier_info['LED Max Stress (mA)']}mA |
-""")
+tier_defaults = TIER_DEFAULTS[st.session_state['tier']]
 
-# === TARGET LENGTH INPUT ===
-target_length_m = st.number_input(
-    label="Target Luminaire Length [m]",
-    min_value=0.100,
-    max_value=7.000,
-    step=0.001,
-    format="%.3f"
-)
-target_length_mm = target_length_m * 1000
-st.session_state['target_length'] = target_length_mm
+# === DISPLAY SELECTED TIER CONFIG ===
+with st.sidebar.expander(f"ℹ️ Tier Settings ({st.session_state['tier']})", expanded=True):
+    st.write(f"LED Scaling %: {tier_defaults['LED Scaling']}")
+    st.write(f"ECG Type: {tier_defaults['ECG Type']}")
+    st.write(f"ECG Stress Limit: {tier_defaults['ECG Stress']}%")
+    st.write(f"LED Stress Limit: {tier_defaults['LED Stress']}mA")
 
-# === LENGTH CALCULATION ===
-def calculate_closest_lengths(target):
-    segment_count = math.floor(target / BPSL)
-    optimal_length = segment_count * BPSL
-    shorter = optimal_length if optimal_length < target else optimal_length - BPSL
-    longer = optimal_length if optimal_length >= target else optimal_length + BPSL
-    return shorter, longer, optimal_length
+# === FILE UPLOAD (IES PARSING) ===
+st.subheader("📄 Upload & Parse IES File")
+uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
 
-shorter_len, longer_len, optimal_len = calculate_closest_lengths(target_length_mm)
+if uploaded_file:
+    file_content = uploaded_file.read().decode('utf-8')
+    st.session_state['ies_file'] = {'name': uploaded_file.name, 'content': file_content}
+    st.success(f"Uploaded: {uploaded_file.name}")
 
-# === BUILD BUTTONS ===
-st.subheader("📐 Length Optimisation Options")
-if optimal_len == target_length_mm:
-    if st.button(f"Optimal Length {optimal_len:.1f}mm"):
-        selected_length = optimal_len
-else:
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button(f"Closest Shorter Length {shorter_len:.1f}mm"):
-            selected_length = shorter_len
-    with col2:
-        if st.button(f"Closest Longer Length {longer_len:.1f}mm"):
-            selected_length = longer_len
+def parse_ies_file(content):
+    lines = content.splitlines()
+    header_lines, data_lines = [], []
+    reading_data = False
 
-# === ADD LENGTH TO TABLE ===
-def add_length_to_table(length_mm):
-    new_row = {
-        "Selected Length (mm)": round(length_mm, 1),
-        "Tier": st.session_state['tier'],
-        "LED Chip Type": tier_info['LED Scaling'],
-        "ECG Type": tier_info['ECG Type'],
-        "Ancillary Positions": ""  # To be populated
-    }
-    st.session_state['length_table'] = pd.concat([st.session_state['length_table'], pd.DataFrame([new_row])], ignore_index=True)
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("TILT"):
+            reading_data = True
+        elif not reading_data:
+            header_lines.append(stripped)
+        else:
+            data_lines.append(stripped)
 
-if 'selected_length' in locals():
-    add_length_to_table(selected_length)
+    photometric_raw = " ".join(data_lines[:2]).split()
+    photometric_params = [float(x) if '.' in x or 'e' in x.lower() else int(x) for x in photometric_raw]
 
-# === DISPLAY LENGTH BUILD TABLE ===
-st.subheader("📊 Luminaire Length Build Table")
-st.dataframe(st.session_state['length_table'])
+    return header_lines, photometric_params
 
-# === ANCILLARY POSITION ASSISTANT ===
-if tier_info['Allow Ancillaries']:
-    with st.expander("🔧 Ancillary Position Assistant", expanded=False):
-        pir_count = st.number_input("Number of PIRs", min_value=0, step=1)
-        spitfire_count = st.number_input("Number of Spitfires", min_value=0, step=1)
+if 'ies_file' in st.session_state:
+    header_lines, photometric_params = parse_ies_file(st.session_state['ies_file']['content'])
+    watts_f = photometric_params[12]
+    lumens_f = photometric_params[1] * photometric_params[0]
 
-        if pir_count > 0 or spitfire_count > 0:
-            if st.button("Begin Ancillary Position Assignment"):
-                st.session_state['remaining_pirs'] = pir_count
-                st.session_state['remaining_spitfires'] = spitfire_count
-                st.session_state['ancillary_mode'] = True
-                st.session_state['ancillary_positions'] = []
+    st.info(f"Parsed IES File Watts [F]: {watts_f}W | Lumens: {lumens_f}")
 
-# === ANCILLARY POSITION INPUT ===
-def process_ancillaries():
-    total_segments = math.floor(selected_length / BPSL)
-    st.info(f"Total Segments Available: {total_segments}")
+# === BOARD CONFIGURATION ===
+st.subheader("📐 LED Board Configuration")
 
-    # PIR Handling
-    if st.session_state['remaining_pirs'] > 0:
-        pir_index = pir_count - st.session_state['remaining_pirs'] + 1
-        pir_pos = st.number_input(f"Enter position (mm) for PIR {pir_index}", min_value=0.0, max_value=selected_length, step=1.0)
-        segment_no = math.ceil(pir_pos / BPSL)
-        if st.button(f"Confirm PIR {pir_index} at Segment {segment_no}"):
-            st.session_state['ancillary_positions'].append(f"PIR-{pir_index}/{segment_no}")
-            st.session_state['remaining_pirs'] -= 1
+bpsl_a = st.number_input("LED in Series Length (A)", min_value=30.0, max_value=100.0, value=46.666, step=0.1, help="Typically 280mm Zhaga Board / Parallel Count (P)")
 
-    # Spitfire Handling
-    elif st.session_state['remaining_spitfires'] > 0:
-        spitfire_index = spitfire_count - st.session_state['remaining_spitfires'] + 1
-        spitfire_pos = st.number_input(f"Enter position (mm) for Spitfire {spitfire_index}", min_value=0.0, max_value=selected_length, step=1.0)
-        segment_no = math.ceil(spitfire_pos / BPSL)
-        if st.button(f"Confirm Spitfire {spitfire_index} at Segment {segment_no}"):
-            st.session_state['ancillary_positions'].append(f"SPITFIRE-{spitfire_index}/{segment_no}")
-            st.session_state['remaining_spitfires'] -= 1
+series_count_s = st.number_input("Series LEDs (S)", min_value=1, max_value=12, value=6)
+parallel_count_p = st.number_input("Parallel Circuits (P)", min_value=1, max_value=12, value=4)
 
-    # Finish and Update Table
-    if st.session_state['remaining_pirs'] == 0 and st.session_state['remaining_spitfires'] == 0:
-        st.success("All Ancillaries Positioned!")
-        ancillary_col = " | ".join(st.session_state['ancillary_positions'])
+ecg_wattage_w = st.number_input("ECG Max Wattage (W)", min_value=10.0, max_value=200.0, value=50.0, step=1.0)
 
-        # Update the ancillary column in the length table
-        idx = st.session_state['length_table'].index[-1]
-        st.session_state['length_table'].at[idx, "Ancillary Positions"] = ancillary_col
-        st.session_state['ancillary_mode'] = False
+# === LENGTH OPTIMISATION ===
+st.subheader("📏 Length Optimisation & Build")
 
-if st.session_state['ancillary_mode']:
-    process_ancillaries()
+target_length = st.number_input("Target Length (m)", min_value=0.1, max_value=10.0, value=2.8, step=0.001)
+
+board_b_length = 6 * bpsl_a
+board_c_length = 12 * bpsl_a
+board_d_length = 24 * bpsl_a
+
+def optimise_length(target_m, tier):
+    target_mm = target_m * 1000
+    boards = []
+    remaining = target_mm
+
+    board_lengths = [board_d_length, board_c_length, board_b_length]
+    if tier in ["Advanced", "Bespoke"]:
+        board_lengths.append(bpsl_a)
+
+    for bl in board_lengths:
+        while remaining >= bl:
+            boards.append(bl)
+            remaining -= bl
+
+    if tier == "Professional" and remaining >= bpsl_a:
+        boards.append(bpsl_a)
+
+    return boards, sum(boards)
+
+selected_boards, final_length = optimise_length(target_length, st.session_state['tier'])
+
+st.write(f"Closest Longer Length: {final_length/1000:.3f}m")
+st.button("Add Length", on_click=lambda: st.session_state['project_lengths'].append({
+    'Tier': st.session_state['tier'],
+    'Target Length': target_length,
+    'Selected Length': final_length / 1000,
+    'Boards': selected_boards,
+    'LED Scaling': tier_defaults['LED Scaling'],
+    'ECG Type': tier_defaults['ECG Type'],
+    'PIR Count': 0,
+    'Spitfire Count': 0,
+}))
+
+# === DISPLAY LENGTH TABLE ===
+if st.session_state['project_lengths']:
+    df_lengths = pd.DataFrame(st.session_state['project_lengths'])
+    st.table(df_lengths)
+
+# === ADMIN PANEL ===
+with st.sidebar.expander("🔐 Admin Panel"):
+    st.write("⚙️ Manage Tier Defaults (WIP)")
+    for t in TIER_DEFAULTS.keys():
+        st.write(f"Tier: {t}")
+        TIER_DEFAULTS[t]['LED Scaling'] = st.number_input(f"{t} - LED Scaling", value=TIER_DEFAULTS[t]['LED Scaling'])
+        TIER_DEFAULTS[t]['ECG Stress'] = st.number_input(f"{t} - ECG Stress", value=TIER_DEFAULTS[t]['ECG Stress'])
+        TIER_DEFAULTS[t]['LED Stress'] = st.number_input(f"{t} - LED Stress", value=TIER_DEFAULTS[t]['LED Stress'])
 
 # === FOOTER ===
-st.caption("Version 3.3 - Length Optimisation + Ancillary Positions + Tier-Based Defaults")
+st.caption("Version 4.0 Alpha - Unified App ✅")
+
