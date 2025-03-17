@@ -92,12 +92,6 @@ if uploaded_file:
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    # === SCALED VALUES ===
-    scaling_factor = 1 + (st.session_state['led_scaling'] / 100)  # Alpha [Y]
-    scaled_lumens = round(calculated_lumens * scaling_factor, 1)
-    scaled_lm_per_watt = round(scaled_lumens / input_watts, 1) if input_watts > 0 else 0
-    scaled_lm_per_m = round(scaled_lumens / length_m, 1) if length_m > 0 else 0
-
     # === DISPLAY ===
     st.markdown("## 📑 IES Metadata")
     meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
@@ -122,11 +116,14 @@ if uploaded_file:
     photometric_df = pd.DataFrame(photometric_data)
     st.table(photometric_df)
 
-    st.markdown("## ✨ Computed Baseline + Scaled Values")
+    st.markdown("## ✨ Computed Baseline Values")
+    # Tool tip for G1
+    st.markdown("#### Base LED Chip: `G1` ℹ️ (TM30 report xxx)")
+
     baseline_data = [
-        {"Description": "Total Lumens", "LED Base [L]": f"{calculated_lumens:.1f}", "Scaled [L*Y]": f"{scaled_lumens:.1f}"},
-        {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}", "Scaled": f"{scaled_lm_per_watt:.1f}"},
-        {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}", "Scaled": f"{scaled_lm_per_m:.1f}"}
+        {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
+        {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
+        {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"}
     ]
     baseline_df = pd.DataFrame(baseline_data)
     st.table(baseline_df)
@@ -135,4 +132,4 @@ else:
     st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 4.0 Alpha - IES Parsing + Computed Baseline Restored ✅")
+st.caption("Version 4.0 Alpha - Computed Baseline Simplified ✅")
