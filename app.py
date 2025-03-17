@@ -4,188 +4,190 @@ import numpy as np
 import time
 
 # === PAGE CONFIG ===
-st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
-st.title("Linear Lightspec Optimiser")
+st.set_page_config(page_title="LED Length Optimisation Table", layout="wide")
+st.title("🛠️ LED Length Optimisation Table - Build Module")
 
 # === SESSION STATE INITIALIZATION ===
-if 'ies_files' not in st.session_state:
-    st.session_state['ies_files'] = []
-if 'matrix_lookup' not in st.session_state:
-    st.session_state['matrix_lookup'] = pd.DataFrame()
-if 'matrix_version' not in st.session_state:
-    st.session_state['matrix_version'] = []
-if 'advanced_unlocked' not in st.session_state:
-    st.session_state['advanced_unlocked'] = False
+if 'build_table' not in st.session_state:
+    st.session_state['build_table'] = pd.DataFrame(columns=[
+        'Project Name (P)', 'Product Tier (T)', 'Input Length (L)',
+        'Final Length (FL)', 'LED Scaling (%) (Y)', 'ECG Type (ET)',
+        'PIR Qty (PQ)', 'Spitfire Qty (SQ)', 'Comment (CM)', 'Timestamp (TS)'
+    ])
+if 'project_name' not in st.session_state:
+    st.session_state['project_name'] = ""
+
+if 'tier_selection' not in st.session_state:
+    st.session_state['tier_selection'] = "Professional"  # Default Tier
+
 if 'led_scaling' not in st.session_state:
-    st.session_state['led_scaling'] = 0.0  # Default to 0%
+    st.session_state['led_scaling'] = 15.0  # Default LED scaling for Professional
 
-# === SIDEBAR ===
+if 'ecg_type' not in st.session_state:
+    st.session_state['ecg_type'] = "DALI2 Standard"
+
+if 'admin_threshold' not in st.session_state:
+    st.session_state['admin_threshold'] = 50.0  # mm threshold for optimal logic
+
+# === ADMIN PANEL ===
 with st.sidebar:
-    st.subheader("⚙️ Advanced Settings")
+    st.header("🔧 Admin Controls")
 
-    with st.expander("Customisation", expanded=False):
-        st.markdown("### 📁 Matrix Upload / Download")
+    st.session_state['admin_threshold'] = st.number_input(
+        "Threshold for Closest Longer/Shorter (mm) [Z]",
+        min_value=10.0, max_value=200.0, value=st.session_state['admin_threshold'], step=5.0,
+        help="Defines when the system recommends longer/shorter lengths. Alpha ref: Z"
+    )
 
-        matrix_file = st.file_uploader("Upload Matrix CSV", type=["csv"])
-        if matrix_file:
-            df_new_matrix = pd.read_csv(matrix_file)
-            required_columns = [
-                'Option Code', 'Option Description',
-                'Diffuser / Louvre Code', 'Diffuser / Louvre Description',
-                'Driver Code', 'Wiring Code', 'Wiring Description',
-                'Driver Description', 'Dimensions Code', 'Dimensions Description',
-                'CRI Code', 'CRI Description', 'CCT/Colour Code', 'CCT/Colour Description'
-            ]
-            if all(col in df_new_matrix.columns for col in required_columns):
-                st.session_state['matrix_lookup'] = df_new_matrix
-                version_time = int(time.time())
-                st.session_state['matrix_version'].append(version_time)
-                st.success(f"Matrix uploaded! Version timestamp: {version_time}")
-            else:
-                st.error("Matrix upload failed: Missing required columns.")
+    st.write(f"**LED Scaling Defaults:** Core 0%, Pro 15%, Adv 15%, Bespoke Editable")
+    st.write(f"**ECG Type Defaults:** Core: Fixed, Pro: DALI2, Adv: DALI2, Bespoke Editable")
 
-        if st.button("Download Current Matrix"):
-            current_matrix = st.session_state['matrix_lookup']
-            csv = current_matrix.to_csv(index=False).encode('utf-8')
-            st.download_button("Download Matrix CSV", csv, "matrix_current.csv", "text/csv")
+# === PROJECT NAME ===
+if not st.session_state['project_name']:
+    st.session_state['project_name'] = st.text_input("Enter Project Name (P) to Start")
 
-        st.markdown("### 🛠️ Advanced LED Parameters")
-        led_pitch_set = st.number_input("LED Pitch Set (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
-        leds_per_pitch_set = st.number_input("LEDs per Pitch Set", min_value=1, max_value=12, value=6)
+# === TIER SELECTION ===
+tier = st.selectbox(
+    "Select Product Tier (T)",
+    options=["Core", "Professional", "Advanced", "Bespoke"],
+    index=["Core", "Professional", "Advanced", "Bespoke"].index(st.session_state['tier_selection']),
+    help="Defines defaults for LED Scaling, ECG Type and other build parameters. Alpha ref: T"
+)
 
-        st.markdown("### Component Lengths")
-        end_plate_thickness = st.number_input("End Plate Thickness (mm)", min_value=1.0, max_value=20.0, value=5.5, step=0.1)
-        pir_length = st.number_input("PIR Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
-        spitfire_length = st.number_input("Spitfire Length (mm)", min_value=10.0, max_value=100.0, value=46.0, step=0.1)
+# === TIER LOCK ===
+tier_locked = False
+if not st.session_state['build_table'].empty:
+    tier_locked = True
+    st.warning(f"Tier locked to: {st.session_state['tier_selection']} (T) for this project (P).")
+else:
+    st.session_state['tier_selection'] = tier
 
-        st.markdown("### 🔧 LED Version 'Chip Scaling' (%)")
-        scaling = st.number_input("LED Version 'Chip Scaling'", min_value=-50.0, max_value=50.0, value=st.session_state['led_scaling'], step=0.1)
-        st.session_state['led_scaling'] = scaling
+# === APPLY DEFAULTS BASED ON TIER ===
+if tier == "Core":
+    st.session_state['led_scaling'] = 0
+    st.session_state['ecg_type'] = "Fixed Output"
+elif tier == "Professional":
+    st.session_state['led_scaling'] = 15
+    st.session_state['ecg_type'] = "DALI2 Standard"
+elif tier == "Advanced":
+    st.session_state['led_scaling'] = 15
+    st.session_state['ecg_type'] = "DALI2 Wireless"
+elif tier == "Bespoke":
+    # Allow manual entry
+    st.session_state['led_scaling'] = st.number_input(
+        "Custom LED Chip Scaling (Y) %",
+        min_value=-50.0, max_value=50.0, value=st.session_state['led_scaling'], step=1.0,
+        help="Alpha ref: Y"
+    )
+    st.session_state['ecg_type'] = st.selectbox(
+        "Select ECG Type (ET)",
+        ["Fixed Output", "DALI2 Standard", "DALI2 Wireless", "Custom"],
+        index=["Fixed Output", "DALI2 Standard", "DALI2 Wireless", "Custom"].index(st.session_state['ecg_type']),
+        help="Alpha ref: ET"
+    )
 
-        if st.button("Unlock Advanced Settings"):
-            st.session_state['advanced_unlocked'] = True
-            st.warning("Super Advanced Users Only: Mandatory comment required.")
+# === INPUT TARGET LENGTH ===
+target_length = st.number_input(
+    "Input Target Length (L) in mm",
+    min_value=100.0, max_value=20000.0, value=1000.0, step=50.0,
+    help="Alpha ref: L"
+)
 
-        if st.session_state['advanced_unlocked']:
-            comment = st.text_area("Mandatory Comment", placeholder="Explain why you are making changes")
-            if not comment:
-                st.error("Comment is mandatory to proceed with changes!")
+# === CALCULATE LENGTH OPTIONS ===
+optimal_length = target_length
+closest_shorter = target_length - st.session_state['admin_threshold']
+closest_longer = target_length + st.session_state['admin_threshold']
 
-# === FILE UPLOAD ON MAIN PAGE ===
-uploaded_file = st.file_uploader("Upload your IES file", type=["ies"])
-if uploaded_file:
-    file_content = uploaded_file.read().decode('utf-8')
-    st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
-    st.success(f"{uploaded_file.name} uploaded!")
+# === DISPLAY BUILD OPTIONS ===
+st.subheader("📏 Build Length Options")
 
-# === FUNCTIONS ===
-def parse_ies_file(file_content):
-    lines = file_content.splitlines()
-    header_lines, data_lines = [], []
-    reading_data = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("TILT"):
-            reading_data = True
-        elif not reading_data:
-            header_lines.append(stripped)
-        else:
-            data_lines.append(stripped)
+if closest_shorter < 0:
+    closest_shorter = 0  # Avoid negative lengths
 
-    photometric_raw = " ".join(data_lines[:2]).split()
-    photometric_params = [float(x) if '.' in x or 'e' in x.lower() else int(x) for x in photometric_raw]
-    n_vert = int(photometric_params[3])
-    n_horz = int(photometric_params[4])
+if (abs(optimal_length - closest_shorter) <= 1e-6) or (abs(optimal_length - closest_longer) <= 1e-6):
+    st.success("Spot on! No alternatives required.")
+    if st.button("➕ Add Optimal Length"):
+        timestamp = time.time()
+        st.session_state['build_table'] = st.session_state['build_table'].append({
+            'Project Name (P)': st.session_state['project_name'],
+            'Product Tier (T)': st.session_state['tier_selection'],
+            'Input Length (L)': target_length,
+            'Final Length (FL)': optimal_length,
+            'LED Scaling (%) (Y)': st.session_state['led_scaling'],
+            'ECG Type (ET)': st.session_state['ecg_type'],
+            'PIR Qty (PQ)': 0 if tier == "Core" else 1,
+            'Spitfire Qty (SQ)': 0 if tier == "Core" else 1,
+            'Comment (CM)': "Optimal length",
+            'Timestamp (TS)': timestamp
+        }, ignore_index=True)
+else:
+    col1, col2, col3 = st.columns(3)
 
-    remaining_data = " ".join(data_lines[2:]).split()
-    vertical_angles = [float(x) for x in remaining_data[:n_vert]]
-    horizontal_angles = [float(x) for x in remaining_data[n_vert:n_vert + n_horz]]
+    with col1:
+        if st.button(f"➕ Add Shorter ({closest_shorter:.1f}mm)"):
+            timestamp = time.time()
+            st.session_state['build_table'] = st.session_state['build_table'].append({
+                'Project Name (P)': st.session_state['project_name'],
+                'Product Tier (T)': st.session_state['tier_selection'],
+                'Input Length (L)': target_length,
+                'Final Length (FL)': closest_shorter,
+                'LED Scaling (%) (Y)': st.session_state['led_scaling'],
+                'ECG Type (ET)': st.session_state['ecg_type'],
+                'PIR Qty (PQ)': 0 if tier == "Core" else 1,
+                'Spitfire Qty (SQ)': 0 if tier == "Core" else 1,
+                'Comment (CM)': "Shorter option",
+                'Timestamp (TS)': timestamp
+            }, ignore_index=True)
 
-    candela_values = remaining_data[n_vert + n_horz:]
-    candela_matrix = []
-    idx = 0
-    for _ in range(n_horz):
-        row = [float(candela_values[idx + i]) for i in range(n_vert)]
-        candela_matrix.append(row)
-        idx += n_vert
+    with col2:
+        if st.button(f"➕ Add Optimal ({optimal_length:.1f}mm)"):
+            timestamp = time.time()
+            st.session_state['build_table'] = st.session_state['build_table'].append({
+                'Project Name (P)': st.session_state['project_name'],
+                'Product Tier (T)': st.session_state['tier_selection'],
+                'Input Length (L)': target_length,
+                'Final Length (FL)': optimal_length,
+                'LED Scaling (%) (Y)': st.session_state['led_scaling'],
+                'ECG Type (ET)': st.session_state['ecg_type'],
+                'PIR Qty (PQ)': 0 if tier == "Core" else 1,
+                'Spitfire Qty (SQ)': 0 if tier == "Core" else 1,
+                'Comment (CM)': "Optimal option",
+                'Timestamp (TS)': timestamp
+            }, ignore_index=True)
 
-    return header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix
+    with col3:
+        if st.button(f"➕ Add Longer ({closest_longer:.1f}mm)"):
+            timestamp = time.time()
+            st.session_state['build_table'] = st.session_state['build_table'].append({
+                'Project Name (P)': st.session_state['project_name'],
+                'Product Tier (T)': st.session_state['tier_selection'],
+                'Input Length (L)': target_length,
+                'Final Length (FL)': closest_longer,
+                'LED Scaling (%) (Y)': st.session_state['led_scaling'],
+                'ECG Type (ET)': st.session_state['ecg_type'],
+                'PIR Qty (PQ)': 0 if tier == "Core" else 1,
+                'Spitfire Qty (SQ)': 0 if tier == "Core" else 1,
+                'Comment (CM)': "Longer option",
+                'Timestamp (TS)': timestamp
+            }, ignore_index=True)
 
-def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix, symmetry_factor=4):
-    vert_rad = np.radians(vertical_angles)
-    delta_vert = np.diff(vert_rad)
-    delta_vert = np.append(delta_vert, delta_vert[-1])
+# === DISPLAY CURRENT BUILD TABLE ===
+st.subheader("🗂️ Build Table (Per Project)")
 
-    symmetry_range_rad = np.radians(horizontal_angles[-1] - horizontal_angles[0])
-    num_horz_segments = len(horizontal_angles)
-    uniform_delta_horz = symmetry_range_rad / num_horz_segments
+if not st.session_state['build_table'].empty:
+    st.dataframe(st.session_state['build_table'].style.format({
+        'Input Length (L)': '{:.1f} mm',
+        'Final Length (FL)': '{:.1f} mm',
+        'LED Scaling (%) (Y)': '{:.1f} %',
+    }))
 
-    total_flux = 0.0
-    for h_idx in range(num_horz_segments):
-        candela_row = candela_matrix[h_idx]
-        for v_idx, cd in enumerate(candela_row):
-            theta = vert_rad[v_idx]
-            d_theta = delta_vert[v_idx]
-            flux = cd * np.sin(theta) * d_theta * uniform_delta_horz
-            total_flux += flux
-
-    return round(total_flux * symmetry_factor, 1)
-
-# === MAIN DISPLAY ===
-if st.session_state['ies_files']:
-    ies_file = st.session_state['ies_files'][0]
-    header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(
-        ies_file['content'])
-
-    calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
-    input_watts = photometric_params[12]
-    length_m = photometric_params[8]
-
-    base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
-    base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
-
-    # === Scaled Values ===
-    scaling_factor = 1 + (st.session_state['led_scaling'] / 100)
-    scaled_lumens = round(calculated_lumens * scaling_factor, 1)
-    scaled_lm_per_watt = round(scaled_lumens / input_watts, 1) if input_watts > 0 else 0
-    scaled_lm_per_m = round(scaled_lumens / length_m, 1) if length_m > 0 else 0
-
-    # === DISPLAY ===
-    with st.expander("📏 Photometric Parameters + Metadata", expanded=False):
-        meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
-        st.markdown("#### IES Metadata")
-        st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
-
-        st.markdown("#### Photometric Parameters")
-        photometric_data = [
-            {"Parameter": "Number of Lamps", "Details": f"{photometric_params[0]} lamp(s) used"},
-            {"Parameter": "Lumens per Lamp", "Details": f"{photometric_params[1]} lm"},
-            {"Parameter": "Candela Multiplier", "Details": f"{photometric_params[2]:.1f}"},
-            {"Parameter": "Vertical Angles Count", "Details": f"{photometric_params[3]}"},
-            {"Parameter": "Horizontal Angles Count", "Details": f"{photometric_params[4]}"},
-            {"Parameter": "Photometric Type", "Details": f"{photometric_params[5]}"},
-            {"Parameter": "Units Type", "Details": f"{photometric_params[6]}"},
-            {"Parameter": "Width", "Details": f"{photometric_params[7]:.2f} m"},
-            {"Parameter": "Length", "Details": f"{photometric_params[8]:.2f} m"},
-            {"Parameter": "Height", "Details": f"{photometric_params[9]:.2f} m"},
-            {"Parameter": "Ballast Factor", "Details": f"{photometric_params[10]:.1f}"},
-            {"Parameter": "Future Use", "Details": f"{photometric_params[11]}"},
-            {"Parameter": "Input Watts", "Details": f"{photometric_params[12]:.1f} W"}
-        ]
-        photometric_df = pd.DataFrame(photometric_data)
-        st.table(photometric_df)
-
-    with st.expander("✨ Computed Baseline + Scaled Values", expanded=False):
-        baseline_data = [
-            {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}", "Scaled": f"{scaled_lumens:.1f}"},
-            {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}", "Scaled": f"{scaled_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}", "Scaled": f"{scaled_lm_per_m:.1f}"}
-        ]
-        baseline_df = pd.DataFrame(baseline_data)
-        st.table(baseline_df)
+    # CSV EXPORT
+    csv = st.session_state['build_table'].to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Build Table CSV", csv, file_name=f"{st.session_state['project_name']}_build_table.csv")
 
 else:
-    st.info("📄 Upload your IES file to proceed.")
+    st.info("No builds added yet.")
 
 # === FOOTER ===
-st.caption("Version 2.1e - LED Chip Scaling + Table Refactor")
+st.caption("Version 3.3 - Length Optimisation Table with Admin Tier Lock and Alpha Tracing ✅")
+
