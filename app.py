@@ -1,12 +1,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
 import os
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
-st.title("Linear Lightspec Optimiser v4.6 Alpha Clean")
+st.title("Linear Lightspec Optimiser v4.7 Clean")
 
 # === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
@@ -14,14 +13,14 @@ if 'ies_files' not in st.session_state:
 if 'matrix_lookup' not in st.session_state:
     st.session_state['matrix_lookup'] = pd.DataFrame()
 
-# === MATRIX AUTO-LOAD (FROM MATRIX HEADERS.CSV) ===
+# === DEFAULT MATRIX AUTO-LOAD ===
 default_matrix_path = "Matrix Headers.csv"
 if os.path.exists(default_matrix_path):
     st.session_state['matrix_lookup'] = pd.read_csv(default_matrix_path)
 else:
-    st.warning("⚠️ Default matrix file not found! Please upload manually.")
+    st.warning("⚠️ Matrix file not found! Please upload manually.")
 
-# === SIDEBAR ===
+# === SIDEBAR: MATRIX UPLOAD ===
 with st.sidebar:
     st.subheader("📁 Matrix Upload / Download")
 
@@ -40,18 +39,13 @@ with st.sidebar:
         else:
             st.error("❌ Matrix upload failed: Missing required columns.")
 
+    # === One-click download ===
     st.download_button(
         label="⬇️ Download Current Matrix CSV",
         data=st.session_state['matrix_lookup'].to_csv(index=False).encode('utf-8'),
         file_name="matrix_current.csv",
         mime="text/csv"
     )
-
-# === FILE UPLOAD: IES ===
-uploaded_file = st.file_uploader("📄 Upload your IES file", type=["ies"])
-if uploaded_file:
-    file_content = uploaded_file.read().decode('utf-8')
-    st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
 
 # === PARSE FUNCTIONS ===
 def parse_ies_file(file_content):
@@ -106,7 +100,6 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
-# === LUMCAT PARSE AND LOOKUP ===
 def parse_lumcat(lumcat_code):
     try:
         range_code, rest = lumcat_code.split('-')
@@ -159,28 +152,30 @@ def lookup_lumcat_descriptions(parsed_codes, matrix_df):
     return result
 
 # === MAIN DISPLAY ===
+uploaded_file = st.file_uploader("📄 Upload your IES file", type=["ies"])
+if uploaded_file:
+    file_content = uploaded_file.read().decode('utf-8')
+    st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
+
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
     header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(
-        ies_file['content']
-    )
+        ies_file['content'])
 
     calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
-    input_watts = photometric_params[12]  # [F]
+    input_watts = photometric_params[12]
     length_m = photometric_params[8]
 
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    # === LUMCAT PARSE & LOOKUP ===
-    lumcat_code = [line.split(']')[-1].strip() for line in header_lines if 'LUMCAT' in line]
-    parsed_codes = parse_lumcat(lumcat_code[0]) if lumcat_code else None
-    description_result = lookup_lumcat_descriptions(parsed_codes, st.session_state['matrix_lookup'])
+    lumcat_code = next((line.split(']')[-1].strip() for line in header_lines if 'LUMCAT' in line), None)
+    parsed_codes = parse_lumcat(lumcat_code) if lumcat_code else None
+    lumcat_descriptions = lookup_lumcat_descriptions(parsed_codes, st.session_state['matrix_lookup'])
 
-    # === DISPLAY ===
     with st.expander("📏 Photometric Parameters + Metadata + Base Values", expanded=False):
-        st.markdown("#### IES Metadata")
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
+        st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
         st.markdown("#### Photometric Parameters")
@@ -211,13 +206,12 @@ if st.session_state['ies_files']:
         ]
         st.table(pd.DataFrame(base_values))
 
-        if description_result:
-            st.markdown("#### LumCAT Reverse Lookup (Matrix)")
-            desc_df = pd.DataFrame(description_result.items(), columns=["Field", "Value"])
+        if lumcat_descriptions:
+            st.markdown("#### LumCAT Reverse Lookup (from Matrix)")
+            desc_df = pd.DataFrame(lumcat_descriptions.items(), columns=["Field", "Value"])
             st.table(desc_df)
-
 else:
     st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 4.6 Alpha Clean - Unified Base Info + Matrix + Tooltips ✅")
+st.caption("Version 4.7 Clean - Unified Base Info + Matrix + Tooltips ✅")
