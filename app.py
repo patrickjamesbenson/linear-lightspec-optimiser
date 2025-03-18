@@ -5,7 +5,7 @@ import os
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
-st.title("Linear Lightspec Optimiser v4.7 Clean")
+st.title("Linear Lightspec Optimiser v4.8 Alpha")
 
 # === SESSION STATE INITIALIZATION ===
 if 'dataset' not in st.session_state:
@@ -47,26 +47,53 @@ matrix_lookup = st.session_state['dataset'].get('Matrix_Lookup', pd.DataFrame())
 led_chips = st.session_state['dataset'].get('LED_Chips', pd.DataFrame())
 ecg_config = st.session_state['dataset'].get('ECG_Config', pd.DataFrame())
 
-# === DISPLAY PARSED DATA ===
+# === MAIN DISPLAY ===
 st.header("📊 Dataset Overview")
 
-st.subheader("🔎 Matrix Lookup Data (First 5 Rows)")
-if not matrix_lookup.empty:
-    st.dataframe(matrix_lookup.head())
-else:
-    st.warning("⚠️ No Matrix_Lookup data found in the dataset.")
-
-st.subheader("🔧 LED Chip Data (First 5 Rows)")
+# === LED CHIP SELECTION ===
+st.subheader("🔧 LED Chip Selection")
 if not led_chips.empty:
-    st.dataframe(led_chips.head())
-else:
-    st.warning("⚠️ No LED_Chips data found in the dataset.")
+    chip_names = led_chips['Chip Name'].tolist()
+    selected_chip = st.selectbox("Select LED Chip", chip_names)
 
-st.subheader("⚡ ECG Configuration Data (First 5 Rows)")
-if not ecg_config.empty:
-    st.dataframe(ecg_config.head())
+    chip_data = led_chips[led_chips['Chip Name'] == selected_chip].iloc[0]
+
+    st.markdown("#### LED Chip Details")
+    st.markdown(f"- **Chip Name:** {chip_data['Chip Name']} [Z1]")
+    st.markdown(f"- **Lumen Output (lm):** {chip_data['Lumen Output']} lm [Z2]")
+    st.markdown(f"- **Max Current (mA):** {chip_data['Max Current (mA)']} mA [Z3]")
+    st.markdown(f"- **Dimensions (mm):** {chip_data['Length (mm)']} x {chip_data['Width (mm)']} [Z4]")
+    st.markdown(f"- **Engineering Safety Factor:** {chip_data['Engineering Safety Factor (%)']}% [Z5]")
+    
+    st.markdown("**Stress Levels (mA / % of Max):**")
+    st.markdown(f"- Low: {chip_data['Stress Level Low (%)']}% ➜ {round(chip_data['Max Current (mA)'] * chip_data['Stress Level Low (%)'] / 100, 1)} mA [Z6]")
+    st.markdown(f"- Med: {chip_data['Stress Level Med (%)']}% ➜ {round(chip_data['Max Current (mA)'] * chip_data['Stress Level Med (%)'] / 100, 1)} mA [Z7]")
+    st.markdown(f"- High: {chip_data['Stress Level High (%)']}% ➜ {round(chip_data['Max Current (mA)'] * chip_data['Stress Level High (%)'] / 100, 1)} mA [Z8]")
+
 else:
-    st.warning("⚠️ No ECG_Config data found in the dataset.")
+    st.warning("⚠️ No LED Chip data found in the dataset.")
+
+# === ECG SELECTION ===
+st.subheader("⚡ ECG Selection")
+if not ecg_config.empty:
+    ecg_names = ecg_config['ECG Model Name'].tolist()
+    selected_ecg = st.selectbox("Select ECG Model", ecg_names)
+
+    ecg_data = ecg_config[ecg_config['ECG Model Name'] == selected_ecg].iloc[0]
+
+    st.markdown("#### ECG Details")
+    st.markdown(f"- **ECG Model Name:** {ecg_data['ECG Model Name']} [E1]")
+    st.markdown(f"- **Max Power (W):** {ecg_data['Max Power (W)']} W [E2]")
+    st.markdown(f"- **Efficiency (%):** {ecg_data['Efficiency (%)']}% [E3]")
+    st.markdown(f"- **Engineering Safety Factor:** {ecg_data['Engineering Safety Factor (%)']}% [E4]")
+
+    st.markdown("**Stress Levels (% of Max Power):**")
+    st.markdown(f"- Low: {ecg_data['Stress Level Low (%)']}% ➜ {round(ecg_data['Max Power (W)'] * ecg_data['Stress Level Low (%)'] / 100, 1)} W [E5]")
+    st.markdown(f"- Med: {ecg_data['Stress Level Med (%)']}% ➜ {round(ecg_data['Max Power (W)'] * ecg_data['Stress Level Med (%)'] / 100, 1)} W [E6]")
+    st.markdown(f"- High: {ecg_data['Stress Level High (%)']}% ➜ {round(ecg_data['Max Power (W)'] * ecg_data['Stress Level High (%)'] / 100, 1)} W [E7]")
+
+else:
+    st.warning("⚠️ No ECG Config data found in the dataset.")
 
 # === FOOTER ===
-st.caption("Version 4.7 Clean - Dataset Upload + Unified Base Info ✅")
+st.caption("Version 4.8 Alpha - LED + ECG Selections + Alpha Indicators ✅")
