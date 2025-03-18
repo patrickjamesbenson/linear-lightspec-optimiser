@@ -1,47 +1,59 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import time
 import os
 
 # === PAGE CONFIG ===
-st.set_page_config(page_title="Linear Lightspec Optimiser v4.8-dev", layout="wide")
-st.title("Linear Lightspec Optimiser v4.8-dev")
+st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
+st.title("Linear Lightspec Optimiser v4.7 Alpha Clean")
 
 # === SESSION STATE INITIALIZATION ===
-if 'dataset_loaded' not in st.session_state:
-    st.session_state['dataset_loaded'] = False
 if 'ies_files' not in st.session_state:
     st.session_state['ies_files'] = []
-if 'selected_led_chip' not in st.session_state:
-    st.session_state['selected_led_chip'] = None
-if 'selected_ecg' not in st.session_state:
-    st.session_state['selected_ecg'] = None
+if 'matrix_lookup' not in st.session_state:
+    st.session_state['matrix_lookup'] = pd.DataFrame()
 
-# === LOAD DATASET ===
-dataset_file = st.sidebar.file_uploader("📁 Upload Dataset Excel", type=["xlsx"])
-if dataset_file:
-    try:
-        dataset = pd.read_excel(dataset_file, sheet_name=None)
-        st.session_state['dataset_loaded'] = True
-        st.success("✅ Dataset loaded successfully!")
+# === DEFAULT MATRIX AUTO-LOAD ===
+default_matrix_path = "Matrix Headers.csv"
+if os.path.exists(default_matrix_path):
+    st.session_state['matrix_lookup'] = pd.read_csv(default_matrix_path)
+else:
+    st.warning("⚠️ Default matrix file not found! Please upload manually.")
 
-        # Pulling sheets
-        matrix_lookup = dataset.get("Matrix Lookup", pd.DataFrame())
-        led_chips = dataset.get("LED Chips", pd.DataFrame())
-        ecg_drivers = dataset.get("ECG Drivers", pd.DataFrame())
+# === SIDEBAR ===
+with st.sidebar:
+    st.subheader("📁 Matrix Upload / Download")
 
-    except Exception as e:
-        st.error(f"❌ Error loading Excel: {e}")
-        st.session_state['dataset_loaded'] = False
+    matrix_file = st.file_uploader("Upload Matrix CSV (Optional)", type=["csv"])
+    if matrix_file:
+        df_new_matrix = pd.read_csv(matrix_file)
+        required_columns = [
+            'Option Code', 'Option Description',
+            'Diffuser / Louvre Code', 'Diffuser / Louvre Description',
+            'Driver Code', 'Wiring Code', 'Wiring Description',
+            'Driver Description', 'Dimensions Code', 'Dimensions Description',
+            'CRI Code', 'CRI Description', 'CCT/Colour Code', 'CCT/Colour Description'
+        ]
+        if all(col in df_new_matrix.columns for col in required_columns):
+            st.session_state['matrix_lookup'] = df_new_matrix
+        else:
+            st.error("❌ Matrix upload failed: Missing required columns.")
 
-# === IES FILE UPLOAD ===
+    st.download_button(
+        label="⬇️ Download Current Matrix CSV",
+        data=st.session_state['matrix_lookup'].to_csv(index=False).encode('utf-8'),
+        file_name="matrix_current.csv",
+        mime="text/csv"
+    )
+
+# === FILE UPLOAD: IES FILE ===
 uploaded_file = st.file_uploader("📄 Upload your IES file", type=["ies"])
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
-    st.success(f"✅ {uploaded_file.name} uploaded!")
 
-# === FUNCTION DEFINITIONS ===
+# === PARSE FUNCTIONS ===
 def parse_ies_file(file_content):
     lines = file_content.splitlines()
     header_lines, data_lines = [], []
@@ -57,63 +69,159 @@ def parse_ies_file(file_content):
 
     photometric_raw = " ".join(data_lines[:2]).split()
     photometric_params = [float(x) if '.' in x or 'e' in x.lower() else int(x) for x in photometric_raw]
+    n_vert = int(photometric_params[3])
+    n_horz = int(photometric_params[4])
 
-    return header_lines, photometric_params
+    remaining_data = " ".join(data_lines[2:]).split()
+    vertical_angles = [float(x) for x in remaining_data[:n_vert]]
+    horizontal_angles = [float(x) for x in remaining_data[n_vert:n_vert + n_horz]]
 
-# === DISPLAY PHOTOMETRIC PARAMETERS ===
+    candela_values = remaining_data[n_vert + n_horz:]
+    candela_matrix = []
+    idx = 0
+    for _ in range(n_horz):
+        row = [float(candela_values[idx + i]) for i in range(n_vert)]
+        candela_matrix.append(row)
+        idx += n_vert
+
+    return header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix
+
+def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix, symmetry_factor=4):
+    vert_rad = np.radians(vertical_angles)
+    delta_vert = np.diff(vert_rad)
+    delta_vert = np.append(delta_vert, delta_vert[-1])
+
+    symmetry_range_rad = np.radians(horizontal_angles[-1] - horizontal_angles[0])
+    num_horz_segments = len(horizontal_angles)
+    uniform_delta_horz = symmetry_range_rad / num_horz_segments
+
+    total_flux = 0.0
+    for h_idx in range(num_horz_segments):
+        candela_row = candela_matrix[h_idx]
+        for v_idx, cd in enumerate(candela_row):
+            theta = vert_rad[v_idx]
+            d_theta = delta_vert[v_idx]
+            flux = cd * np.sin(theta) * d_theta * uniform_delta_horz
+            total_flux += flux
+
+    return round(total_flux * symmetry_factor, 1)
+
+# === LUMCAT PARSE FUNCTIONS (UPDATED) ===
+def parse_lumcat(lumcat_code):
+    try:
+        range_code, rest = lumcat_code.split('-')
+
+        option_code = rest[0:2]
+        diffuser_code = rest[2:4]
+        wiring_code = rest[4]
+        driver_code = rest[5:7]
+        lumens_code = rest[7:10]
+        cri_code = rest[10:12]
+        cct_code = rest[12:14]
+
+        # Multiply by 10 for display
+        lumens_derived_display = round(float(lumens_code) * 10, 1)
+
+        return {
+            "Range": range_code,
+            "Option Code": option_code,
+            "Diffuser Code": diffuser_code,
+            "Wiring Code": wiring_code,
+            "Driver Code": driver_code,
+            "Lumens Derived Display": lumens_derived_display,
+            "CRI Code": cri_code,
+            "CCT Code": cct_code
+        }
+
+    except Exception as e:
+        st.error(f"Error parsing LUMCAT: {e}")
+        return None
+
+def lookup_lumcat_descriptions(parsed_codes, matrix_df):
+    if matrix_df.empty or parsed_codes is None:
+        return None
+
+    result = {}
+    result['Range'] = parsed_codes['Range']
+
+    option_match = matrix_df.loc[matrix_df['Option Code'] == parsed_codes['Option Code']]
+    diffuser_match = matrix_df.loc[matrix_df['Diffuser / Louvre Code'] == parsed_codes['Diffuser Code']]
+    wiring_match = matrix_df.loc[matrix_df['Wiring Code'] == parsed_codes['Wiring Code']]
+    driver_match = matrix_df.loc[matrix_df['Driver Code'] == parsed_codes['Driver Code']]
+    cri_match = matrix_df.loc[matrix_df['CRI Code'] == parsed_codes['CRI Code']]
+    cct_match = matrix_df.loc[matrix_df['CCT/Colour Code'] == parsed_codes['CCT Code']]
+
+    result['Option Description'] = option_match['Option Description'].values[0] if not option_match.empty else "⚠️ Not Found"
+    result['Diffuser Description'] = diffuser_match['Diffuser / Louvre Description'].values[0] if not diffuser_match.empty else "⚠️ Not Found"
+    result['Wiring Description'] = wiring_match['Wiring Description'].values[0] if not wiring_match.empty else "⚠️ Not Found"
+    result['Driver Description'] = driver_match['Driver Description'].values[0] if not driver_match.empty else "⚠️ Not Found"
+    result['Lumens (Display Only)'] = f"{parsed_codes['Lumens Derived Display']} lm"  # Display only, not for calculations
+    result['CRI Description'] = cri_match['CRI Description'].values[0] if not cri_match.empty else "⚠️ Not Found"
+    result['CCT Description'] = cct_match['CCT/Colour Description'].values[0] if not cct_match.empty else "⚠️ Not Found"
+
+    return result
+
+# === MAIN DISPLAY ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
-    header_lines, photometric_params = parse_ies_file(ies_file['content'])
+    header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(
+        ies_file['content'])
 
-    with st.expander("📏 Photometric Parameters + Base Values", expanded=True):
-        st.markdown("### IES Metadata")
+    calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
+    input_watts = photometric_params[12]
+    length_m = photometric_params[8]
+
+    base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
+    base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
+
+    with st.expander("📏 Photometric Parameters + Metadata + Base Values", expanded=False):
+        # === IES Metadata ===
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
+        st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-        st.markdown("### Photometric Parameters (A-M)")
-        param_labels = [
-            ("A", "Lamps", photometric_params[0]),
-            ("B", "Lumens/Lamp", photometric_params[1]),
-            ("C", "Candela Mult.", photometric_params[2]),
-            ("D", "Vert Angles", photometric_params[3]),
-            ("E", "Horiz Angles", photometric_params[4]),
-            ("F", "Photometric Type", photometric_params[5]),
-            ("G", "Units Type", photometric_params[6]),
-            ("H", "Width (m)", photometric_params[7]),
-            ("I", "Length (m)", photometric_params[8]),
-            ("J", "Height (m)", photometric_params[9]),
-            ("K", "Ballast Factor", photometric_params[10]),
-            ("L", "Future Use", photometric_params[11]),
-            ("M", "Input Watts [F]", photometric_params[12])
+        # === Photometric Parameters ===
+        st.markdown("#### Photometric Parameters")
+        photometric_table = [
+            {"Param": "A", "Description": "Lamps", "Value": f"{photometric_params[0]}"},
+            {"Param": "B", "Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
+            {"Param": "C", "Description": "Candela Mult.", "Value": f"{photometric_params[2]}"},
+            {"Param": "D", "Description": "Vert Angles", "Value": f"{photometric_params[3]}"},
+            {"Param": "E", "Description": "Horiz Angles", "Value": f"{photometric_params[4]}"},
+            {"Param": "F", "Description": "Photometric Type", "Value": f"{photometric_params[5]}"},
+            {"Param": "G", "Description": "Units Type", "Value": f"{photometric_params[6]}"},
+            {"Param": "H", "Description": "Width (m)", "Value": f"{photometric_params[7]}"},
+            {"Param": "I", "Description": "Length (m)", "Value": f"{photometric_params[8]}"},
+            {"Param": "J", "Description": "Height (m)", "Value": f"{photometric_params[9]}"},
+            {"Param": "K", "Description": "Ballast Factor", "Value": f"{photometric_params[10]}"},
+            {"Param": "L", "Description": "Future Use", "Value": f"{photometric_params[11]}"},
+            {"Param": "M", "Description": "Input Watts [F]", "Value": f"{photometric_params[12]}"}
         ]
-        param_df = pd.DataFrame(param_labels, columns=["Param", "Description", "Value"])
-        st.table(param_df)
+        st.table(pd.DataFrame(photometric_table))
 
-# === LED CHIP SELECTION ===
-if st.session_state.get('dataset_loaded'):
-    st.subheader("🔧 LED Chip Selection")
+        # === Base Values ===
+        st.markdown("#### Base Values")
+        base_values = [
+            {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
+            {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
+            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
+            {"Description": "Base LED Chip", "LED Base": "G1 (Gen1 Spec: TM30 Report XXX)"},
+            {"Description": "Base Design", "LED Base": "6S/4P/14.4W/280mm/400mA/G1/DR12w"}
+        ]
+        st.table(pd.DataFrame(base_values))
 
-    chip_names = led_chips['Chip'].tolist()
-    selected_chip = st.selectbox("Select LED Chip", chip_names)
+        # === LumCAT Reverse Lookup ===
+        st.markdown("#### LumCAT Reverse Lookup (Matrix)")
+        lumcat_code = meta_dict.get("[LUMCAT]", "")
+        parsed_codes = parse_lumcat(lumcat_code) if lumcat_code else None
+        description_result = lookup_lumcat_descriptions(parsed_codes, st.session_state['matrix_lookup'])
+        if description_result:
+            st.table(pd.DataFrame(description_result.items(), columns=["Field", "Value"]))
+        else:
+            st.info("⚠️ No valid LumCAT code found or Matrix not loaded.")
 
-    chip_data = led_chips[led_chips['Chip'] == selected_chip].iloc[0]
-
-    st.markdown(f"- **Chip Name:** {chip_data['Chip']}")
-    st.markdown(f"- **lm@350mA:** {chip_data['LED lm @350mA']}")
-    st.markdown(f"- **Engineering Safety Factor:** {chip_data['Engineering Safety Factor %']}%")
-
-# === ECG SELECTION ===
-if st.session_state.get('dataset_loaded'):
-    st.subheader("⚡ ECG Driver Selection")
-
-    ecg_names = ecg_drivers['ECG'].tolist()
-    selected_ecg = st.selectbox("Select ECG Driver", ecg_names)
-
-    ecg_data = ecg_drivers[ecg_drivers['ECG'] == selected_ecg].iloc[0]
-
-    st.markdown(f"- **ECG Name:** {ecg_data['ECG']}")
-    st.markdown(f"- **Max Output W:** {ecg_data['Max Output W']}")
-    st.markdown(f"- **Engineering Safety Factor:** {ecg_data['Engineering Safety Factor %']}%")
+else:
+    st.info("📄 Upload your IES file to proceed.")
 
 # === FOOTER ===
-st.caption("Version 4.8-dev - UI Integration Phase ✅")
+st.caption("Version 4.7 Alpha Clean - LumCAT Parse Update + Matrix ✅")
