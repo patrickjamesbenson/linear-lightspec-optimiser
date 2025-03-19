@@ -97,6 +97,54 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
+# === LUMCAT PARSE + LOOKUP ===
+def parse_lumcat(lumcat_code):
+    try:
+        range_code, rest = lumcat_code.split('-')
+        option_code = rest[0:2]
+        diffuser_code = rest[2:4]
+        wiring_code = rest[4]
+        driver_code = rest[5:7]
+        lumens_code = rest[7:10]
+        cri_code = rest[10:12]
+        cct_code = rest[12:14]
+        lumens_derived = round(float(lumens_code) * 10, 1)
+
+        return {
+            "Range": range_code,
+            "Option Code": option_code,
+            "Diffuser Code": diffuser_code,
+            "Wiring Code": wiring_code,
+            "Driver Code": driver_code,
+            "Lumens (Derived)": lumens_derived,
+            "CRI Code": cri_code,
+            "CCT Code": cct_code
+        }
+    except Exception as e:
+        st.error(f"Error parsing LUMCAT: {e}")
+        return None
+
+def lookup_lumcat_descriptions(parsed_codes, matrix_df):
+    if matrix_df.empty or parsed_codes is None:
+        return None
+
+    matrix_df.columns = matrix_df.columns.str.strip()
+
+    def get_value(df, code_col, desc_col, code):
+        match = df.loc[df[code_col] == code]
+        return match[desc_col].values[0] if not match.empty else "⚠️ Not Found"
+
+    return {
+        'Range': parsed_codes['Range'],
+        'Option Description': get_value(matrix_df, 'Option Code', 'Option Description', parsed_codes['Option Code']),
+        'Diffuser Description': get_value(matrix_df, 'Diffuser / Louvre Code', 'Diffuser / Louvre Description', parsed_codes['Diffuser Code']),
+        'Wiring Description': get_value(matrix_df, 'Wiring Code', 'Wiring Description', parsed_codes['Wiring Code']),
+        'Driver Description': get_value(matrix_df, 'Driver Code', 'Driver Description', parsed_codes['Driver Code']),
+        'Lumens (Derived)': parsed_codes['Lumens (Derived)'],
+        'CRI Description': get_value(matrix_df, 'CRI Code', 'CRI Description', parsed_codes['CRI Code']),
+        'CCT Description': get_value(matrix_df, 'CCT/Colour Code', 'CCT/Colour Description', parsed_codes['CCT Code'])
+    }
+
 # === MAIN DISPLAY ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
@@ -155,6 +203,24 @@ if st.session_state['ies_files']:
         ]
         st.table(pd.DataFrame(base_values))
 
-# === FOOTER ===
-st.caption("Version 4.7 Clean ✅ - Dataset Upload + Unified Base Info + Photometric Params to 1dp")
+    # === LUMCAT REVERSE LOOKUP ===
+    with st.expander("🔎 LumCAT Reverse Lookup (Matrix)", expanded=False):
+        lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
+        lumcat_code = meta_dict.get('[LUMCAT]', '').strip()
 
+        if lumcat_code:
+            parsed_codes = parse_lumcat(lumcat_code)
+            if parsed_codes:
+                lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
+                if lumcat_desc:
+                    st.markdown(f"**LumCAT Code:** `{lumcat_code}`")
+                    st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
+                else:
+                    st.error("LumCAT reverse lookup failed.")
+            else:
+                st.error("Invalid LumCAT code format.")
+        else:
+            st.warning("No LumCAT code found in the IES Metadata.")
+
+# === FOOTER ===
+st.caption("Version 4.7 Clean ✅ - Dataset Upload + Unified Base Info + LumCAT Reverse Lookup")
