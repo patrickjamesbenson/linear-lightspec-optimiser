@@ -180,8 +180,8 @@ if st.session_state['ies_files']:
         st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-        # === Photometric Parameters ===
-        st.markdown("#### Photometric Parameters")
+        # === IES Parameters ===
+        st.markdown("#### IES Parameters")
         photometric_table = [
             {"Description": "Lamps", "Value": f"{photometric_params[0]}"},
             {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
@@ -199,8 +199,8 @@ if st.session_state['ies_files']:
         ]
         st.table(pd.DataFrame(photometric_table))
 
-        # === Base Values ===
-        st.markdown("#### Base Values")
+        # === IES Derived Values ===
+        st.markdown("#### IES Derived Values")
         base_values = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
@@ -210,8 +210,8 @@ if st.session_state['ies_files']:
         ]
         st.table(pd.DataFrame(base_values))
 
-        # === LumCAT Reverse Lookup ===
-        st.markdown("#### LumCAT Reverse Lookup (Matrix)")
+        # === LumCAT Code Descriptions ===
+        st.markdown("#### LumCAT Code Descriptions")
         lumcat_code = meta_dict.get("[LUMCAT]", "")
         parsed_codes = parse_lumcat(lumcat_code) if lumcat_code else None
         description_result = lookup_lumcat_descriptions(parsed_codes, st.session_state['matrix_lookup'])
