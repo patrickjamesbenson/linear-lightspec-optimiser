@@ -108,5 +108,37 @@ if st.session_state['ies_files']:
         ]
         st.table(pd.DataFrame(photometric_table).style.format({'Value': '{:.1f}'}))
 
+# === Base Values ===
+st.markdown("#### Base Values")
+
+# Pull default LED and board configuration
+default_led_df = st.session_state['dataset']['LED_and_Board_Config']
+default_led = default_led_df.iloc[0]
+
+# Extract fields
+default_tier = default_led['Default Tier']
+chip_name = default_led['Chip Name']
+max_led_load_ma = default_led['Max LED Load (mA)']
+internal_code_tm30 = default_led['Internal Code / TM30']
+
+# Actual LED current calculation
+input_watts = round(photometric_params[12], 1)
+length_m = round(photometric_params[8], 1)
+led_pitch_mm = default_led['LED Pitch (mm)']
+actual_led_current_ma = round((input_watts / length_m) * (led_pitch_mm / 1000), 1)
+
+base_values = [
+    {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
+    {"Description": "Efficacy (lm/W)", "LED Base": f"{calculated_lumens / input_watts:.1f}"},
+    {"Description": "Lumens per Meter", "LED Base": f"{calculated_lumens / length_m:.1f}"},
+    {"Description": "Default Tier", "LED Base": default_tier},
+    {"Description": "Chip Name", "LED Base": chip_name},
+    {"Description": "Internal Code / TM30", "LED Base": internal_code_tm30},
+    {"Description": "Max LED Load (mA)", "LED Base": f"{max_led_load_ma:.1f}"},
+    {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current_ma:.1f}"}
+]
+
+st.table(pd.DataFrame(base_values))
+
 # === FOOTER ===
 st.caption("Version 4.7 Clean ✅ - Dataset Upload + Unified Base Info")
