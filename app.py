@@ -5,7 +5,7 @@ import os
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
-st.title("Linear Lightspec Optimiser")
+st.title("Linear Lightspec Optimiser v4.7 Clean ✅")
 
 # === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
@@ -27,9 +27,9 @@ else:
 
 # === SIDEBAR ===
 with st.sidebar:
-    st.subheader("📁 Linear Lightspec Data")
+    st.subheader("📁 Linear Lightspec Dataset Upload")
 
-    uploaded_excel = st.file_uploader("Upload Excel Data", type=["xlsx"])
+    uploaded_excel = st.file_uploader("Upload Dataset Excel", type=["xlsx"])
     if uploaded_excel:
         workbook = pd.ExcelFile(uploaded_excel)
         st.session_state['dataset'] = {
@@ -153,7 +153,8 @@ def lookup_lumcat_descriptions(parsed_codes, matrix_df):
 # === MAIN DISPLAY ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
-    header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(ies_file['content'])
+    header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(
+        ies_file['content'])
 
     calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
     input_watts = photometric_params[12]
@@ -164,11 +165,16 @@ if st.session_state['ies_files']:
 
     default_led_df = st.session_state['dataset']['LED_and_Board_Config']
     default_led = default_led_df.iloc[0]
+
+    default_tier = default_led['Default Tier']
+    chip_name = default_led['Chip Name']
+    max_led_load_ma = default_led['Max LED Load (mA)']
+    internal_code_tm30 = default_led['Internal Code / TM30']
+    led_pitch_mm = default_led['Board Segment LED Pitch (mm) [LB15]']
     led_forward_voltage = default_led['LED Forward Voltage (V) [LB6]']
 
-    # Actual LED Current calculation (mA)
     input_power_per_meter = input_watts / length_m
-    actual_led_current = round((input_power_per_meter / led_forward_voltage) * 1000, 1)
+    actual_led_current_ma = round((input_power_per_meter / led_forward_voltage) * 1000, 1)
 
     with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
@@ -199,26 +205,26 @@ if st.session_state['ies_files']:
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
             {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
-            {"Description": "Default Tier / Chip", "LED Base": f"{default_led['Default Tier']} / {default_led['Chip Name']}"},
-            {"Description": "Max LED Load (mA)", "LED Base": f"{default_led['Max LED Load (mA)']}"},
+            {"Description": "Default Tier / Chip", "LED Base": f"{default_tier} / {chip_name}"},
+            {"Description": "Max LED Load (mA)", "LED Base": f"{max_led_load_ma:.1f}"},
             {"Description": "LED Pitch (mm)", "LED Base": f"{led_pitch_mm:.1f}"},
-            {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current}"},
-            {"Description": "TM30 Code", "LED Base": f"{default_led['Internal Code / TM30']}"}
+            {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current_ma:.1f}"},
+            {"Description": "TM30 Code", "LED Base": f"{internal_code_tm30}"}
         ]
         st.table(pd.DataFrame(base_values))
 
-    with st.expander("🔎 LumCAT Code Descriptions", expanded=False):
-        lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
-        lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
+with st.expander("🔎 LumCAT Reverse Lookup (Matrix)", expanded=False):
+    lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
+    lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
 
-        lumcat_input = st.text_input("Enter LumCAT Code", value=lumcat_from_meta)
+    lumcat_input = st.text_input("Enter LumCAT Code", value=lumcat_from_meta)
 
-        if lumcat_input:
-            parsed_codes = parse_lumcat(lumcat_input)
-            if parsed_codes:
-                lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
-                if lumcat_desc:
-                    st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
+    if lumcat_input:
+        parsed_codes = parse_lumcat(lumcat_input)
+        if parsed_codes:
+            lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
+            if lumcat_desc:
+                st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
 
 # === FOOTER ===
-st.caption("Version 4.8 Clean ✅ - Unified Base Info + LumCAT Reverse Lookup + Confirmed Dataset")
+st.caption("Version 4.7 Clean ✅ - Unified Base Info + LumCAT Reverse Lookup + Confirmed Dataset")
