@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
 import os
 
 # === PAGE CONFIG ===
@@ -22,7 +21,6 @@ def load_dataset(file_path):
         st.session_state['dataset']['LumCAT_Config'] = pd.read_excel(xls, 'LumCAT_Config')
         st.session_state['dataset']['LED_and_Board_Config'] = pd.read_excel(xls, 'LED_and_Board_Config')
         st.session_state['dataset']['ECG_Config'] = pd.read_excel(xls, 'ECG_Config')
-        st.success("✅ Dataset loaded successfully!")
     except Exception as e:
         st.error(f"❌ Error loading Excel: {e}")
 
@@ -36,7 +34,7 @@ else:
 # === SIDEBAR: DATASET UPLOAD ===
 with st.sidebar:
     st.subheader("📁 Linear Lightspec Dataset Upload")
-    dataset_file = st.file_uploader("Upload Dataset Excel (Recommended: Linear_Lightspec_Data.xlsx)", type=["xlsx"])
+    dataset_file = st.file_uploader("Upload Dataset Excel", type=["xlsx"])
     if dataset_file:
         load_dataset(dataset_file)
 
@@ -45,7 +43,6 @@ uploaded_file = st.file_uploader("📄 Upload your IES file", type=["ies"])
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
-    st.success(f"{uploaded_file.name} uploaded!")
 
 # === PARSE IES FUNCTION ===
 def parse_ies_file(file_content):
@@ -120,7 +117,7 @@ if st.session_state['ies_files']:
         st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-        # Photometric Parameters
+        # Photometric Parameters (Cleaned)
         st.markdown("#### Photometric Parameters")
         photometric_data = [
             {"Param [A]": "Lamps", "Value": photometric_params[0]},
@@ -139,7 +136,7 @@ if st.session_state['ies_files']:
         ]
         st.table(pd.DataFrame(photometric_data))
 
-        # Base Values
+        # Base Values (Cleaned)
         st.markdown("#### Base Values")
         base_values = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
@@ -183,32 +180,32 @@ if st.session_state['ies_files']:
         if matrix_df.empty or parsed_codes is None:
             return None
 
-        result = {}
+        def get_value(df, code_col, desc_col, code):
+            match = df.loc[df[code_col] == code]
+            return match[desc_col].values[0] if not match.empty else "⚠️ Not Found"
 
-        option_match = matrix_df.loc[matrix_df['Option Code'] == parsed_codes['Option Code']]
-        diffuser_match = matrix_df.loc[matrix_df['Diffuser / Louvre Code'] == parsed_codes['Diffuser Code']]
-        wiring_match = matrix_df.loc[matrix_df['Wiring Code'] == parsed_codes['Wiring Code']]
-        driver_match = matrix_df.loc[matrix_df['Driver Code'] == parsed_codes['Driver Code']]
-        cri_match = matrix_df.loc[matrix_df['CRI Code'] == parsed_codes['CRI Code']]
-        cct_match = matrix_df.loc[matrix_df['CCT/Colour Code'] == parsed_codes['CCT Code']]
-
-        result['Range'] = parsed_codes['Range']
-        result['Option Description'] = option_match['Option Description'].values[0] if not option_match.empty else "⚠️ Not Found"
-        result['Diffuser Description'] = diffuser_match['Diffuser / Louvre Description'].values[0] if not diffuser_match.empty else "⚠️ Not Found"
-        result['Wiring Description'] = wiring_match['Wiring Description'].values[0] if not wiring_match.empty else "⚠️ Not Found"
-        result['Driver Description'] = driver_match['Driver Description'].values[0] if not driver_match.empty else "⚠️ Not Found"
-        result['Lumens (Derived)'] = parsed_codes['Lumens (Derived)']
-        result['CRI Description'] = cri_match['CRI Description'].values[0] if not cri_match.empty else "⚠️ Not Found"
-        result['CCT Description'] = cct_match['CCT/Colour Description'].values[0] if not cct_match.empty else "⚠️ Not Found"
+        result = {
+            'Range': parsed_codes['Range'],
+            'Option Description': get_value(matrix_df, 'Option Code', 'Option Description', parsed_codes['Option Code']),
+            'Diffuser Description': get_value(matrix_df, 'Diffuser / Louvre Code', 'Diffuser / Louvre Description', parsed_codes['Diffuser Code']),
+            'Wiring Description': get_value(matrix_df, 'Wiring Code', 'Wiring Description', parsed_codes['Wiring Code']),
+            'Driver Description': get_value(matrix_df, 'Driver Code', 'Driver Description', parsed_codes['Driver Code']),
+            'Lumens (Derived)': parsed_codes['Lumens (Derived)'],
+            'CRI Description': get_value(matrix_df, 'CRI Code', 'CRI Description', parsed_codes['CRI Code']),
+            'CCT Description': get_value(matrix_df, 'CCT/Colour Code', 'CCT/Colour Description', parsed_codes['CCT Code'])
+        }
 
         return result
 
     lumcat_input = st.text_input("Enter LumCAT Code", value="B852-BSA3AAA1488030ZZ")
     parsed_codes = parse_lumcat(lumcat_input)
-    lumcat_desc = lookup_lumcat_descriptions(parsed_codes, st.session_state['dataset']['LumCAT_Config'])
 
-    if lumcat_desc:
-        st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
+    if parsed_codes:
+        lumcat_matrix_df = st.session_state['dataset'].get('LumCAT_Config', pd.DataFrame())
+        lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
+
+        if lumcat_desc:
+            st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
 
 # === FOOTER ===
 st.caption("Version 4.7 Clean - Dataset Excel Integration ✅")
