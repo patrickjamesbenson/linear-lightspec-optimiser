@@ -174,7 +174,7 @@ if st.session_state['ies_files']:
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    with st.expander("📏 Photometric Parameters + Metadata + Base Values", expanded=False):
+    with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
         # === IES Metadata ===
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
         st.markdown("#### IES Metadata")
