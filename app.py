@@ -190,8 +190,8 @@ if st.session_state['ies_files']:
         ]
         st.table(pd.DataFrame(photometric_table))
 
-        # === Base Values ===
-        st.markdown("#### Base Values")
+        # === IES Derived Values ===
+        st.markdown("#### IES Derived Values")
         base_values = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
