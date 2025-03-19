@@ -102,27 +102,23 @@ def parse_lumcat(lumcat_code):
     try:
         range_code, rest = lumcat_code.split('-')
 
-        option_code = rest[0:2]
-        diffuser_code = rest[2:4]
-        wiring_code = rest[4]
-        driver_code = rest[5:7]
-        lumens_code = rest[7:10]
-        cri_code = rest[10:12]
-        cct_code = rest[12:14]
-
-        lumens_derived_display = round(float(lumens_code) * 10, 1)
-
-        return {
+        parsed = {
             "Range": range_code,
-            "Option Code": option_code,
-            "Diffuser Code": diffuser_code,
-            "Wiring Code": wiring_code,
-            "Driver Code": driver_code,
-            "Lumens Derived Display": lumens_derived_display,
-            "Lumens Code": lumens_code,
-            "CRI Code": cri_code,
-            "CCT Code": cct_code
+            "Option Code": rest[0:2],
+            "Diffuser Code": rest[2:4],
+            "Wiring Code": rest[4],
+            "Driver Code": rest[5:7],
+            "Lumens Code": rest[7:10],
+            "CRI Code": rest[10:12],
+            "CCT Code": rest[12:14],
         }
+
+        parsed['Lumens Derived Display'] = round(float(parsed["Lumens Code"]) * 10, 1)
+
+        # Debug field positions
+        st.write("🔢 Parsed LUMCAT Fields:", parsed)
+
+        return parsed
 
     except Exception as e:
         st.error(f"Error parsing LUMCAT: {e}")
@@ -132,26 +128,42 @@ def lookup_lumcat_descriptions(parsed_codes, matrix_df):
     if matrix_df.empty or parsed_codes is None:
         return None
 
-    def safe_lookup(df, code_col, desc_col, code):
-        match = df.loc[df[code_col] == code]
-        return match[desc_col].values[0] if not match.empty else "⚠️ Not Found"
+    matrix_df.columns = matrix_df.columns.str.strip()
+    matrix_df['CRI Code'] = matrix_df['CRI Code'].astype(str).str.strip()
+    matrix_df['CCT/Colour Code'] = matrix_df['CCT/Colour Code'].astype(str).str.strip()
 
-    return {
-        'Range': parsed_codes['Range'],
-        f"Option Code ({parsed_codes['Option Code']})": safe_lookup(matrix_df, 'Option Code', 'Option Description', parsed_codes['Option Code']),
-        f"Diffuser Code ({parsed_codes['Diffuser Code']})": safe_lookup(matrix_df, 'Diffuser / Louvre Code', 'Diffuser / Louvre Description', parsed_codes['Diffuser Code']),
-        f"Wiring Code ({parsed_codes['Wiring Code']})": safe_lookup(matrix_df, 'Wiring Code', 'Wiring Description', parsed_codes['Wiring Code']),
-        f"Driver Code ({parsed_codes['Driver Code']})": safe_lookup(matrix_df, 'Driver Code', 'Driver Description', parsed_codes['Driver Code']),
-        f"Lumens Code ({parsed_codes['Lumens Code']})": f"{parsed_codes['Lumens Derived Display']} lm",
-        f"CRI Code ({parsed_codes['CRI Code']})": safe_lookup(matrix_df, 'CRI Code', 'CRI Description', parsed_codes['CRI Code']),
-        f"CCT Code ({parsed_codes['CCT Code']})": safe_lookup(matrix_df, 'CCT/Colour Code', 'CCT/Colour Description', parsed_codes['CCT Code'])
-    }
+    parsed_codes['CRI Code'] = str(parsed_codes['CRI Code']).strip()
+    parsed_codes['CCT Code'] = str(parsed_codes['CCT Code']).strip()
+
+    result = {}
+    result['Range'] = parsed_codes['Range']
+
+    option_match = matrix_df.loc[matrix_df['Option Code'] == parsed_codes['Option Code']]
+    diffuser_match = matrix_df.loc[matrix_df['Diffuser / Louvre Code'] == parsed_codes['Diffuser Code']]
+    wiring_match = matrix_df.loc[matrix_df['Wiring Code'] == parsed_codes['Wiring Code']]
+    driver_match = matrix_df.loc[matrix_df['Driver Code'] == parsed_codes['Driver Code']]
+    cri_match = matrix_df.loc[matrix_df['CRI Code'] == parsed_codes['CRI Code']]
+    cct_match = matrix_df.loc[matrix_df['CCT/Colour Code'] == parsed_codes['CCT Code']]
+
+    result['Option Description'] = option_match['Option Description'].values[0] if not option_match.empty else "⚠️ Not Found"
+    result['Diffuser Description'] = diffuser_match['Diffuser / Louvre Description'].values[0] if not diffuser_match.empty else "⚠️ Not Found"
+    result['Wiring Description'] = wiring_match['Wiring Description'].values[0] if not wiring_match.empty else "⚠️ Not Found"
+    result['Driver Description'] = driver_match['Driver Description'].values[0] if not driver_match.empty else "⚠️ Not Found"
+    result['Lumens (Display Only)'] = f"{parsed_codes['Lumens Derived Display']} lm"
+    result['CRI Description'] = cri_match['CRI Description'].values[0] if not cri_match.empty else "⚠️ Not Found"
+    result['CCT Description'] = cct_match['CCT/Colour Description'].values[0] if not cct_match.empty else "⚠️ Not Found"
+
+    # Debug lookup results
+    st.write("🔎 Lookup Results:", result)
+
+    return result
 
 # === MAIN DISPLAY ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
     header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(
-        ies_file['content'])
+        ies_file['content']
+    )
 
     calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
     input_watts = photometric_params[12]
@@ -209,7 +221,6 @@ if st.session_state['ies_files']:
         ]
         st.table(pd.DataFrame(base_values))
 
-        # === LumCAT Lookup ===
         st.markdown("#### 🔎 LumCAT Reverse Lookup (Matrix)")
         lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
         lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
@@ -221,7 +232,7 @@ if st.session_state['ies_files']:
             if parsed_codes:
                 lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
                 if lumcat_desc:
-                    st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field (Code)", "Value"]))
+                    st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
 
 # === FOOTER ===
 st.caption("Version 4.7 Clean ✅ - Unified Base Info + LumCAT Reverse Lookup + Confirmed Dataset")
