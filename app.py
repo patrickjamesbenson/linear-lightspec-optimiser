@@ -115,9 +115,6 @@ def parse_lumcat(lumcat_code):
 
         parsed['Lumens Derived Display'] = round(float(parsed["Lumens Code"]) * 10, 1)
 
-        # Debug field positions
-        st.write("🔢 Parsed LUMCAT Fields:", parsed)
-
         return parsed
 
     except Exception as e:
@@ -152,9 +149,6 @@ def lookup_lumcat_descriptions(parsed_codes, matrix_df):
     result['Lumens (Display Only)'] = f"{parsed_codes['Lumens Derived Display']} lm"
     result['CRI Description'] = cri_match['CRI Description'].values[0] if not cri_match.empty else "⚠️ Not Found"
     result['CCT Description'] = cct_match['CCT/Colour Description'].values[0] if not cct_match.empty else "⚠️ Not Found"
-
-    # Debug lookup results
-    st.write("🔎 Lookup Results:", result)
 
     return result
 
