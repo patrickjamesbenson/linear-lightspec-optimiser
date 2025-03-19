@@ -145,10 +145,9 @@ if st.session_state['ies_files']:
         max_led_load_ma = default_led['Max LED Load (mA)']
         internal_code_tm30 = default_led['Internal Code / TM30']
 
-        # ✅ This is the fixed line
-        led_pitch_mm = default_led['Board Segment LED Pitch (mm) [LB15]']
-
-        actual_led_current_ma = round((input_watts / length_m) * (led_pitch_mm / 1000), 1)
+led_forward_voltage = default_led['LED Forward Voltage (V) [LB6]']
+input_power_per_meter = input_watts / length_m
+actual_led_current_ma = round((input_power_per_meter / led_forward_voltage) * 1000, 1)
 
         base_values = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
