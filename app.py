@@ -5,7 +5,7 @@ import os
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
-st.title("Linear Lightspec Optimiser v4.7 Clean ✅")
+st.title("Linear Lightspec Optimiser")
 
 # === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
@@ -27,9 +27,9 @@ else:
 
 # === SIDEBAR ===
 with st.sidebar:
-    st.subheader("📁 Linear Lightspec Dataset Upload")
+    st.subheader("📁 Linear Lightspec Data")
 
-    uploaded_excel = st.file_uploader("Upload Dataset Excel", type=["xlsx"])
+    uploaded_excel = st.file_uploader("Upload Excel Data", type=["xlsx"])
     if uploaded_excel:
         workbook = pd.ExcelFile(uploaded_excel)
         st.session_state['dataset'] = {
@@ -206,7 +206,7 @@ if st.session_state['ies_files']:
         ]
         st.table(pd.DataFrame(base_values))
 
-    with st.expander("🔎 LumCAT Reverse Lookup (Matrix)", expanded=False):
+    with st.expander("🔎 LumCAT Code Descriptions", expanded=False):
         lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
         lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
 
@@ -220,4 +220,4 @@ if st.session_state['ies_files']:
                     st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
 
 # === FOOTER ===
-st.caption("Version 4.7 Clean ✅ - Unified Base Info + LumCAT Reverse Lookup + Confirmed Dataset")
+st.caption("Version 4.8 Clean ✅ - Unified Base Info + LumCAT Reverse Lookup + Confirmed Dataset")
