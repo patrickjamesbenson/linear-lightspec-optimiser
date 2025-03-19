@@ -1,4 +1,4 @@
-import streamlit as st 
+import streamlit as st
 import pandas as pd
 import numpy as np
 import os
@@ -28,6 +28,7 @@ else:
 # === SIDEBAR ===
 with st.sidebar:
     st.subheader("📁 Linear Lightspec Dataset Upload")
+
     uploaded_excel = st.file_uploader("Upload Dataset Excel", type=["xlsx"])
     if uploaded_excel:
         workbook = pd.ExcelFile(uploaded_excel)
@@ -157,68 +158,37 @@ if st.session_state['ies_files']:
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    # === LED & BOARD CONFIG DATA ===
-    led_board_df = st.session_state['dataset']['LED_and_Board_Config']
-    default_led = led_board_df.iloc[0] if not led_board_df.empty else None
-
-    actual_led_current = 0
-    max_led_stress = 0
-    chip_name = ""
-    default_tier = ""
-    tm30_code = ""
-
-    if default_led is not None:
-        try:
-            series_leds = default_led["Series LED's"]
-            led_pitch = default_led['LED Pitch (mm)'] / 1000
-            actual_led_current = round((input_watts / length_m) * led_pitch, 1)
-            max_led_stress = default_led['Max LED Load (mA)']
-            chip_name = default_led['Chip Name']
-            default_tier = default_led['Default Tier']
-            tm30_code = default_led['Internal Code / TM30']
-        except Exception as e:
-            st.error(f"LED Board Calc Error: {e}")
-
     with st.expander("📏 Photometric Parameters + Metadata + Base Values", expanded=True):
         # === IES Metadata ===
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
         st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-# === Photometric Parameters ===
-st.markdown("#### Photometric Parameters")
-
-photometric_table = [
-    {"Param": "A", "Description": "Lamps", "Value": round(photometric_params[0], 1)},
-    {"Param": "B", "Description": "Lumens/Lamp", "Value": round(photometric_params[1], 1)},
-    {"Param": "C", "Description": "Candela Mult.", "Value": round(photometric_params[2], 1)},
-    {"Param": "D", "Description": "Vert Angles", "Value": round(photometric_params[3], 1)},
-    {"Param": "E", "Description": "Horiz Angles", "Value": round(photometric_params[4], 1)},
-    {"Param": "F", "Description": "Photometric Type", "Value": round(photometric_params[5], 1)},
-    {"Param": "G", "Description": "Units Type", "Value": round(photometric_params[6], 1)},
-    {"Param": "H", "Description": "Width (m)", "Value": round(photometric_params[7], 1)},
-    {"Param": "I", "Description": "Length (m)", "Value": round(photometric_params[8], 1)},
-    {"Param": "J", "Description": "Height (m)", "Value": round(photometric_params[9], 1)},
-    {"Param": "K", "Description": "Ballast Factor", "Value": round(photometric_params[10], 1)},
-    {"Param": "L", "Description": "Future Use", "Value": round(photometric_params[11], 1)},
-    {"Param": "M", "Description": "Input Watts [F]", "Value": round(photometric_params[12], 1)}
-]
-
-st.table(pd.DataFrame(photometric_table))
-
-
+        # === Photometric Parameters ===
+        st.markdown("#### Photometric Parameters")
+        photometric_table = [
+            {"Param": "A", "Description": "Lamps", "Value": round(photometric_params[0], 1)},
+            {"Param": "B", "Description": "Lumens/Lamp", "Value": round(photometric_params[1], 1)},
+            {"Param": "C", "Description": "Candela Mult.", "Value": round(photometric_params[2], 1)},
+            {"Param": "D", "Description": "Vert Angles", "Value": round(photometric_params[3], 1)},
+            {"Param": "E", "Description": "Horiz Angles", "Value": round(photometric_params[4], 1)},
+            {"Param": "F", "Description": "Photometric Type", "Value": round(photometric_params[5], 1)},
+            {"Param": "G", "Description": "Units Type", "Value": round(photometric_params[6], 1)},
+            {"Param": "H", "Description": "Width (m)", "Value": round(photometric_params[7], 1)},
+            {"Param": "I", "Description": "Length (m)", "Value": round(photometric_params[8], 1)},
+            {"Param": "J", "Description": "Height (m)", "Value": round(photometric_params[9], 1)},
+            {"Param": "K", "Description": "Ballast Factor", "Value": round(photometric_params[10], 1)},
+            {"Param": "L", "Description": "Future Use", "Value": round(photometric_params[11], 1)},
+            {"Param": "M", "Description": "Input Watts [F]", "Value": round(photometric_params[12], 1)}
+        ]
+        st.table(pd.DataFrame(photometric_table))
 
         # === Base Values ===
         st.markdown("#### Base Values")
         base_values = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
-            {"Description": "Default Tier", "LED Base": default_tier},
-            {"Description": "Chip Name", "LED Base": chip_name},
-            {"Description": "Max LED Load (mA)", "LED Base": max_led_stress},
-            {"Description": "Actual LED Current (mA)", "LED Base": actual_led_current},
-            {"Description": "Internal Code / TM30", "LED Base": tm30_code}
+            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"}
         ]
         st.table(pd.DataFrame(base_values))
 
