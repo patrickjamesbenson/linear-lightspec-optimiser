@@ -4,8 +4,8 @@ import numpy as np
 import os
 
 # === PAGE CONFIG ===
-st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
-st.title("Linear Lightspec Optimiser v4.7 Clean ✅")
+st.set_page_config(page_title="Evolt Linear Optimiser", layout="wide")
+st.title("Evolt Linear Optimiser v4.8")
 
 # === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
@@ -14,7 +14,7 @@ if 'dataset' not in st.session_state:
     st.session_state['dataset'] = {}
 
 # === DEFAULT DATASET LOAD ===
-default_excel_path = 'Linear_Lightspec_Data.xlsx'
+default_excel_path = 'Linear_Data.xlsx'
 if os.path.exists(default_excel_path):
     workbook = pd.ExcelFile(default_excel_path)
     st.session_state['dataset'] = {
@@ -27,9 +27,9 @@ else:
 
 # === SIDEBAR ===
 with st.sidebar:
-    st.subheader("📁 Linear Lightspec Dataset Upload")
+    st.subheader("📁 Linear Data Upload")
 
-    uploaded_excel = st.file_uploader("Upload Dataset Excel", type=["xlsx"])
+    uploaded_excel = st.file_uploader("Upload Data Excel", type=["xlsx"])
     if uploaded_excel:
         workbook = pd.ExcelFile(uploaded_excel)
         st.session_state['dataset'] = {
@@ -39,7 +39,7 @@ with st.sidebar:
         }
 
 # === FILE UPLOAD: IES FILE ===
-uploaded_file = st.file_uploader("📄 Upload your IES file", type=["ies"])
+uploaded_file = st.file_uploader("📄 Upload IES file", type=["ies"])
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
@@ -215,7 +215,7 @@ if st.session_state['ies_files']:
         ]
         st.table(pd.DataFrame(base_values))
 
-        st.markdown("#### 🔎 LumCAT Reverse Lookup (Matrix)")
+        st.markdown("#### 🔎 LumCAT Lookup")
         lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
         lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
 
@@ -229,4 +229,4 @@ if st.session_state['ies_files']:
                     st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
 
 # === FOOTER ===
-st.caption("Version 4.7 Clean ✅ - Unified Base Info + LumCAT Reverse Lookup + Confirmed Dataset")
+st.caption("Version 4.8 - Unified Base Info + LumCAT Lookup + Confirmed Dataset")
