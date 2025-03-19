@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
 import os
 
 # === PAGE CONFIG ===
@@ -17,15 +16,12 @@ if 'dataset' not in st.session_state:
 # === DEFAULT DATASET LOAD ===
 default_excel_path = 'Linear_Lightspec_Data.xlsx'
 if os.path.exists(default_excel_path):
-    try:
-        workbook = pd.ExcelFile(default_excel_path)
-        st.session_state['dataset'] = {
-            'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
-            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
-            'ECG_Config': pd.read_excel(workbook, 'ECG_Config')
-        }
-    except Exception as e:
-        st.error(f"❌ Error loading Excel: {e}")
+    workbook = pd.ExcelFile(default_excel_path)
+    st.session_state['dataset'] = {
+        'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
+        'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
+        'ECG_Config': pd.read_excel(workbook, 'ECG_Config')
+    }
 else:
     st.warning("⚠️ Default dataset not found! Please upload manually.")
 
@@ -35,23 +31,18 @@ with st.sidebar:
 
     uploaded_excel = st.file_uploader("Upload Dataset Excel", type=["xlsx"])
     if uploaded_excel:
-        try:
-            workbook = pd.ExcelFile(uploaded_excel)
-            st.session_state['dataset'] = {
-                'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
-                'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
-                'ECG_Config': pd.read_excel(workbook, 'ECG_Config')
-            }
-            st.success("✅ Dataset loaded successfully!")
-        except Exception as e:
-            st.error(f"❌ Error loading Excel: {e}")
+        workbook = pd.ExcelFile(uploaded_excel)
+        st.session_state['dataset'] = {
+            'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
+            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
+            'ECG_Config': pd.read_excel(workbook, 'ECG_Config')
+        }
 
 # === FILE UPLOAD: IES FILE ===
 uploaded_file = st.file_uploader("📄 Upload your IES file", type=["ies"])
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
-    st.success(f"{uploaded_file.name} uploaded!")
 
 # === PARSE FUNCTIONS ===
 def parse_ies_file(file_content):
@@ -127,22 +118,22 @@ if st.session_state['ies_files']:
 
         # === Photometric Parameters ===
         st.markdown("#### Photometric Parameters")
-        photometric_data = [
-            {"Param [A]": "Lamps", "Value": photometric_params[0]},
-            {"Param [B]": "Lumens/Lamp", "Value": photometric_params[1]},
-            {"Param [C]": "Candela Mult.", "Value": photometric_params[2]},
-            {"Param [D]": "Vert Angles", "Value": photometric_params[3]},
-            {"Param [E]": "Horiz Angles", "Value": photometric_params[4]},
-            {"Param [F]": "Photometric Type", "Value": photometric_params[5]},
-            {"Param [G]": "Units Type", "Value": photometric_params[6]},
-            {"Param [H]": "Width (m)", "Value": photometric_params[7]},
-            {"Param [I]": "Length (m)", "Value": photometric_params[8]},
-            {"Param [J]": "Height (m)", "Value": photometric_params[9]},
-            {"Param [K]": "Ballast Factor", "Value": photometric_params[10]},
-            {"Param [L]": "Future Use", "Value": photometric_params[11]},
-            {"Param [M]": "Input Watts [F]", "Value": photometric_params[12]},
+        photometric_table = [
+            {"Param": "A", "Description": "Lamps", "Value": photometric_params[0]},
+            {"Param": "B", "Description": "Lumens/Lamp", "Value": photometric_params[1]},
+            {"Param": "C", "Description": "Candela Mult.", "Value": photometric_params[2]},
+            {"Param": "D", "Description": "Vert Angles", "Value": photometric_params[3]},
+            {"Param": "E", "Description": "Horiz Angles", "Value": photometric_params[4]},
+            {"Param": "F", "Description": "Photometric Type", "Value": photometric_params[5]},
+            {"Param": "G", "Description": "Units Type", "Value": photometric_params[6]},
+            {"Param": "H", "Description": "Width (m)", "Value": photometric_params[7]},
+            {"Param": "I", "Description": "Length (m)", "Value": photometric_params[8]},
+            {"Param": "J", "Description": "Height (m)", "Value": photometric_params[9]},
+            {"Param": "K", "Description": "Ballast Factor", "Value": photometric_params[10]},
+            {"Param": "L", "Description": "Future Use", "Value": photometric_params[11]},
+            {"Param": "M", "Description": "Input Watts [F]", "Value": photometric_params[12]}
         ]
-        st.table(pd.DataFrame(photometric_data))
+        st.table(pd.DataFrame(photometric_table))
 
         # === Base Values ===
         st.markdown("#### Base Values")
@@ -186,24 +177,9 @@ def parse_lumcat(lumcat_code):
 
 def lookup_lumcat_descriptions(parsed_codes, matrix_df):
     if matrix_df.empty or parsed_codes is None:
-        st.warning("LumCAT Matrix data is empty or parsing failed!")
         return None
 
     matrix_df.columns = matrix_df.columns.str.strip()
-
-    required_cols = [
-        'Option Code', 'Option Description',
-        'Diffuser / Louvre Code', 'Diffuser / Louvre Description',
-        'Wiring Code', 'Wiring Description',
-        'Driver Code', 'Driver Description',
-        'CRI Code', 'CRI Description',
-        'CCT/Colour Code', 'CCT/Colour Description'
-    ]
-
-    missing_cols = [col for col in required_cols if col not in matrix_df.columns]
-    if missing_cols:
-        st.error(f"❌ Missing columns in LumCAT Matrix: {missing_cols}")
-        return None
 
     def get_value(df, code_col, desc_col, code):
         match = df.loc[df[code_col] == code]
@@ -221,14 +197,14 @@ def lookup_lumcat_descriptions(parsed_codes, matrix_df):
     }
 
 lumcat_input = st.text_input("Enter LumCAT Code", value="B852-BSA3AAA1488030ZZ")
-parsed_codes = parse_lumcat(lumcat_input)
 
-if parsed_codes:
+if lumcat_input:
+    parsed_codes = parse_lumcat(lumcat_input)
     lumcat_matrix_df = st.session_state['dataset'].get('LumCAT_Config', pd.DataFrame())
-    lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
-
-    if lumcat_desc:
-        st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
+    if parsed_codes:
+        lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
+        if lumcat_desc:
+            st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
 
 # === FOOTER ===
 st.caption("Version 4.7 Clean ✅ - Dataset Upload + Unified Base Info + LumCAT Reverse Lookup")
