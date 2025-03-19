@@ -196,8 +196,10 @@ if st.session_state['ies_files']:
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
             {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
-            {"Description": "Base LED Chip", "LED Base": "G1 (Gen1 Spec: TM30 Report XXX)"},
-            {"Description": "Base Design", "LED Base": "6S/4P/14.4W/280mm/400mA/G1/DR12w"}
+            {"Description": "Default Tier / Chip", "LED Base": f"{default_led['Default Tier']} / {default_led['Chip Name']}"},
+            {"Description": "Max LED Load (mA)", "LED Base": f"{default_led['Max LED Load (mA)']}"},
+            {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current}"},
+            {"Description": "TM30 Code", "LED Base": f"{default_led['Internal Code / TM30']}"}
         ]
         st.table(pd.DataFrame(base_values))
 
