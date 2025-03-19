@@ -1,51 +1,42 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
 import os
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
-st.title("Linear Lightspec Optimiser v4.7 Alpha Clean")
+st.title("Linear Lightspec Optimiser v4.7 Clean ✅")
 
 # === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
     st.session_state['ies_files'] = []
-if 'matrix_lookup' not in st.session_state:
-    st.session_state['matrix_lookup'] = pd.DataFrame()
+if 'dataset' not in st.session_state:
+    st.session_state['dataset'] = {}
 
-# === DEFAULT MATRIX AUTO-LOAD ===
-default_matrix_path = "Matrix Headers.csv"
-if os.path.exists(default_matrix_path):
-    st.session_state['matrix_lookup'] = pd.read_csv(default_matrix_path)
+# === DEFAULT DATASET LOAD ===
+default_excel_path = 'Linear_Lightspec_Data.xlsx'
+if os.path.exists(default_excel_path):
+    workbook = pd.ExcelFile(default_excel_path)
+    st.session_state['dataset'] = {
+        'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
+        'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
+        'ECG_Config': pd.read_excel(workbook, 'ECG_Config')
+    }
 else:
-    st.warning("⚠️ Default matrix file not found! Please upload manually.")
+    st.warning("⚠️ Default dataset not found! Please upload manually.")
 
 # === SIDEBAR ===
 with st.sidebar:
-    st.subheader("📁 Matrix Upload / Download")
+    st.subheader("📁 Linear Lightspec Dataset Upload")
 
-    matrix_file = st.file_uploader("Upload Matrix CSV (Optional)", type=["csv"])
-    if matrix_file:
-        df_new_matrix = pd.read_csv(matrix_file)
-        required_columns = [
-            'Option Code', 'Option Description',
-            'Diffuser / Louvre Code', 'Diffuser / Louvre Description',
-            'Driver Code', 'Wiring Code', 'Wiring Description',
-            'Driver Description', 'Dimensions Code', 'Dimensions Description',
-            'CRI Code', 'CRI Description', 'CCT/Colour Code', 'CCT/Colour Description'
-        ]
-        if all(col in df_new_matrix.columns for col in required_columns):
-            st.session_state['matrix_lookup'] = df_new_matrix
-        else:
-            st.error("❌ Matrix upload failed: Missing required columns.")
-
-    st.download_button(
-        label="⬇️ Download Current Matrix CSV",
-        data=st.session_state['matrix_lookup'].to_csv(index=False).encode('utf-8'),
-        file_name="matrix_current.csv",
-        mime="text/csv"
-    )
+    uploaded_excel = st.file_uploader("Upload Dataset Excel", type=["xlsx"])
+    if uploaded_excel:
+        workbook = pd.ExcelFile(uploaded_excel)
+        st.session_state['dataset'] = {
+            'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
+            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
+            'ECG_Config': pd.read_excel(workbook, 'ECG_Config')
+        }
 
 # === FILE UPLOAD: IES FILE ===
 uploaded_file = st.file_uploader("📄 Upload your IES file", type=["ies"])
