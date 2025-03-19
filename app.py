@@ -1,11 +1,11 @@
-import streamlit as st
+import streamlit as st 
 import pandas as pd
 import numpy as np
 import os
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
-st.title("Linear Lightspec Optimiser v4.7 Clean ✅")
+st.title("Linear Lightspec Optimiser v4.7 ✅")
 
 # === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
@@ -28,7 +28,6 @@ else:
 # === SIDEBAR ===
 with st.sidebar:
     st.subheader("📁 Linear Lightspec Dataset Upload")
-
     uploaded_excel = st.file_uploader("Upload Dataset Excel", type=["xlsx"])
     if uploaded_excel:
         workbook = pd.ExcelFile(uploaded_excel)
@@ -97,7 +96,7 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
-# === LUMCAT PARSE + LOOKUP ===
+# === LUMCAT REVERSE LOOKUP ===
 def parse_lumcat(lumcat_code):
     try:
         range_code, rest = lumcat_code.split('-')
@@ -136,13 +135,13 @@ def lookup_lumcat_descriptions(parsed_codes, matrix_df):
 
     return {
         'Range': parsed_codes['Range'],
-        'Option Description': get_value(matrix_df, 'Option Code', 'Option Description', parsed_codes['Option Code']),
-        'Diffuser Description': get_value(matrix_df, 'Diffuser / Louvre Code', 'Diffuser / Louvre Description', parsed_codes['Diffuser Code']),
-        'Wiring Description': get_value(matrix_df, 'Wiring Code', 'Wiring Description', parsed_codes['Wiring Code']),
-        'Driver Description': get_value(matrix_df, 'Driver Code', 'Driver Description', parsed_codes['Driver Code']),
-        'Lumens (Derived)': parsed_codes['Lumens (Derived)'],
-        'CRI Description': get_value(matrix_df, 'CRI Code', 'CRI Description', parsed_codes['CRI Code']),
-        'CCT Description': get_value(matrix_df, 'CCT/Colour Code', 'CCT/Colour Description', parsed_codes['CCT Code'])
+        'Option Description [BS]': get_value(matrix_df, 'Option Code', 'Option Description', parsed_codes['Option Code']),
+        'Diffuser Description [A3]': get_value(matrix_df, 'Diffuser / Louvre Code', 'Diffuser / Louvre Description', parsed_codes['Diffuser Code']),
+        'Wiring Description [A]': get_value(matrix_df, 'Wiring Code', 'Wiring Description', parsed_codes['Wiring Code']),
+        'Driver Description [A1]': get_value(matrix_df, 'Driver Code', 'Driver Description', parsed_codes['Driver Code']),
+        'Lumens (Derived) [488]': parsed_codes['Lumens (Derived)'],
+        'CRI Description [80]': get_value(matrix_df, 'CRI Code', 'CRI Description', parsed_codes['CRI Code']),
+        'CCT Description [30]': get_value(matrix_df, 'CCT/Colour Code', 'CCT/Colour Description', parsed_codes['CCT Code'])
     }
 
 # === MAIN DISPLAY ===
@@ -158,15 +157,29 @@ if st.session_state['ies_files']:
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    # === LED and Board Config ===
+    # === LED & BOARD CONFIG DATA ===
     led_board_df = st.session_state['dataset']['LED_and_Board_Config']
-    default_led = led_board_df.iloc[0]
+    default_led = led_board_df.iloc[0] if not led_board_df.empty else None
 
-    # === Compute Actual LED Current in mA ===
-    led_pitch_mm = default_led['LED Pitch (mm)']
-    actual_led_current_mA = round((input_watts / length_m) * led_pitch_mm, 1)
+    actual_led_current = 0
+    max_led_stress = 0
+    chip_name = ""
+    default_tier = ""
+    tm30_code = ""
 
-    with st.expander("📏 Photometric Parameters + Metadata + Base Values", expanded=False):
+    if default_led is not None:
+        try:
+            series_leds = default_led["Series LED's"]
+            led_pitch = default_led['LED Pitch (mm)'] / 1000
+            actual_led_current = round((input_watts / length_m) * led_pitch, 1)
+            max_led_stress = default_led['Max LED Load (mA)']
+            chip_name = default_led['Chip Name']
+            default_tier = default_led['Default Tier']
+            tm30_code = default_led['Internal Code / TM30']
+        except Exception as e:
+            st.error(f"LED Board Calc Error: {e}")
+
+    with st.expander("📏 Photometric Parameters + Metadata + Base Values", expanded=True):
         # === IES Metadata ===
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
         st.markdown("#### IES Metadata")
@@ -175,19 +188,19 @@ if st.session_state['ies_files']:
         # === Photometric Parameters ===
         st.markdown("#### Photometric Parameters")
         photometric_table = [
-            {"Param": "A", "Description": "Lamps", "Value": f"{photometric_params[0]:.1f}"},
-            {"Param": "B", "Description": "Lumens/Lamp", "Value": f"{photometric_params[1]:.1f}"},
-            {"Param": "C", "Description": "Candela Mult.", "Value": f"{photometric_params[2]:.1f}"},
-            {"Param": "D", "Description": "Vert Angles", "Value": f"{photometric_params[3]:.1f}"},
-            {"Param": "E", "Description": "Horiz Angles", "Value": f"{photometric_params[4]:.1f}"},
-            {"Param": "F", "Description": "Photometric Type", "Value": f"{photometric_params[5]:.1f}"},
-            {"Param": "G", "Description": "Units Type", "Value": f"{photometric_params[6]:.1f}"},
-            {"Param": "H", "Description": "Width (m)", "Value": f"{photometric_params[7]:.1f}"},
-            {"Param": "I", "Description": "Length (m)", "Value": f"{photometric_params[8]:.1f}"},
-            {"Param": "J", "Description": "Height (m)", "Value": f"{photometric_params[9]:.1f}"},
-            {"Param": "K", "Description": "Ballast Factor", "Value": f"{photometric_params[10]:.1f}"},
-            {"Param": "L", "Description": "Future Use", "Value": f"{photometric_params[11]:.1f}"},
-            {"Param": "M", "Description": "Input Watts [F]", "Value": f"{photometric_params[12]:.1f}"}
+            {"Param": "A", "Description": "Lamps", "Value": round(photometric_params[0], 1)},
+            {"Param": "B", "Description": "Lumens/Lamp", "Value": round(photometric_params[1], 1)},
+            {"Param": "C", "Description": "Candela Mult.", "Value": round(photometric_params[2], 1)},
+            {"Param": "D", "Description": "Vert Angles", "Value": round(photometric_params[3], 1)},
+            {"Param": "E", "Description": "Horiz Angles", "Value": round(photometric_params[4], 1)},
+            {"Param": "F", "Description": "Photometric Type", "Value": round(photometric_params[5], 1)},
+            {"Param": "G", "Description": "Units Type", "Value": round(photometric_params[6], 1)},
+            {"Param": "H", "Description": "Width (m)", "Value": round(photometric_params[7], 1)},
+            {"Param": "I", "Description": "Length (m)", "Value": round(photometric_params[8], 1)},
+            {"Param": "J", "Description": "Height (m)", "Value": round(photometric_params[9], 1)},
+            {"Param": "K", "Description": "Ballast Factor", "Value": round(photometric_params[10], 1)},
+            {"Param": "L", "Description": "Future Use", "Value": round(photometric_params[11], 1)},
+            {"Param": "M", "Description": "Input Watts [F]", "Value": round(photometric_params[12], 1)}
         ]
         st.table(pd.DataFrame(photometric_table))
 
@@ -197,30 +210,28 @@ if st.session_state['ies_files']:
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
             {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
-            {"Description": "Default Tier / Chip Name", "LED Base": f"{default_led['Default Tier']} / {default_led['Chip Name']}"},
-            {"Description": "Max LED Load (mA)", "LED Base": f"{default_led['Max LED Load (mA)']}"},
-            {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current_mA}"}
+            {"Description": "Default Tier", "LED Base": default_tier},
+            {"Description": "Chip Name", "LED Base": chip_name},
+            {"Description": "Max LED Load (mA)", "LED Base": max_led_stress},
+            {"Description": "Actual LED Current (mA)", "LED Base": actual_led_current},
+            {"Description": "Internal Code / TM30", "LED Base": tm30_code}
         ]
         st.table(pd.DataFrame(base_values))
 
     # === LUMCAT REVERSE LOOKUP ===
     with st.expander("🔎 LumCAT Reverse Lookup (Matrix)", expanded=False):
         lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
-        lumcat_code = meta_dict.get('[LUMCAT]', '').strip()
+        lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
 
-        if lumcat_code:
-            parsed_codes = parse_lumcat(lumcat_code)
+        lumcat_input = st.text_input("Enter LumCAT Code", value=lumcat_from_meta)
+
+        if lumcat_input:
+            parsed_codes = parse_lumcat(lumcat_input)
             if parsed_codes:
                 lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
                 if lumcat_desc:
-                    st.markdown(f"**LumCAT Code:** `{lumcat_code}`")
+                    st.markdown("#### Reverse Lookup Results")
                     st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
-                else:
-                    st.error("LumCAT reverse lookup failed.")
-            else:
-                st.error("Invalid LumCAT code format.")
-        else:
-            st.warning("No LumCAT code found in the IES Metadata.")
 
 # === FOOTER ===
 st.caption("Version 4.7 Clean ✅ - Dataset Upload + Unified Base Info + LumCAT Reverse Lookup")
