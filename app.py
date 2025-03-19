@@ -97,61 +97,6 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
-# === LUMCAT PARSE FUNCTIONS (UPDATED) ===
-def parse_lumcat(lumcat_code):
-    try:
-        range_code, rest = lumcat_code.split('-')
-
-        option_code = rest[0:2]
-        diffuser_code = rest[2:4]
-        wiring_code = rest[4]
-        driver_code = rest[5:7]
-        lumens_code = rest[7:10]
-        cri_code = rest[10:12]
-        cct_code = rest[12:14]
-
-        # Multiply by 10 for display
-        lumens_derived_display = round(float(lumens_code) * 10, 1)
-
-        return {
-            "Range": range_code,
-            "Option Code": option_code,
-            "Diffuser Code": diffuser_code,
-            "Wiring Code": wiring_code,
-            "Driver Code": driver_code,
-            "Lumens Derived Display": lumens_derived_display,
-            "CRI Code": cri_code,
-            "CCT Code": cct_code
-        }
-
-    except Exception as e:
-        st.error(f"Error parsing LUMCAT: {e}")
-        return None
-
-def lookup_lumcat_descriptions(parsed_codes, matrix_df):
-    if matrix_df.empty or parsed_codes is None:
-        return None
-
-    result = {}
-    result['Range'] = parsed_codes['Range']
-
-    option_match = matrix_df.loc[matrix_df['Option Code'] == parsed_codes['Option Code']]
-    diffuser_match = matrix_df.loc[matrix_df['Diffuser / Louvre Code'] == parsed_codes['Diffuser Code']]
-    wiring_match = matrix_df.loc[matrix_df['Wiring Code'] == parsed_codes['Wiring Code']]
-    driver_match = matrix_df.loc[matrix_df['Driver Code'] == parsed_codes['Driver Code']]
-    cri_match = matrix_df.loc[matrix_df['CRI Code'] == parsed_codes['CRI Code']]
-    cct_match = matrix_df.loc[matrix_df['CCT/Colour Code'] == parsed_codes['CCT Code']]
-
-    result['Option Description'] = option_match['Option Description'].values[0] if not option_match.empty else "⚠️ Not Found"
-    result['Diffuser Description'] = diffuser_match['Diffuser / Louvre Description'].values[0] if not diffuser_match.empty else "⚠️ Not Found"
-    result['Wiring Description'] = wiring_match['Wiring Description'].values[0] if not wiring_match.empty else "⚠️ Not Found"
-    result['Driver Description'] = driver_match['Driver Description'].values[0] if not driver_match.empty else "⚠️ Not Found"
-    result['Lumens (Display Only)'] = f"{parsed_codes['Lumens Derived Display']} lm"  # Display only, not for calculations
-    result['CRI Description'] = cri_match['CRI Description'].values[0] if not cri_match.empty else "⚠️ Not Found"
-    result['CCT Description'] = cct_match['CCT/Colour Description'].values[0] if not cct_match.empty else "⚠️ Not Found"
-
-    return result
-
 # === MAIN DISPLAY ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
@@ -165,93 +110,57 @@ if st.session_state['ies_files']:
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
-        # === IES Metadata ===
+    with st.expander("📏 Parameters + Metadata + Derived Values", expanded=True):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
         st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
         # === IES Parameters ===
-        st.markdown("#### IES Parameters")
+        st.markdown("#### Photometric Parameters")
         photometric_table = [
-            {"Description": "Lamps", "Value": f"{photometric_params[0]}"},
-            {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
-            {"Description": "Candela Mult.", "Value": f"{photometric_params[2]}"},
-            {"Description": "Vert Angles", "Value": f"{photometric_params[3]}"},
-            {"Description": "Horiz Angles", "Value": f"{photometric_params[4]}"},
-            {"Description": "Photometric Type", "Value": f"{photometric_params[5]}"},
-            {"Description": "Units Type", "Value": f"{photometric_params[6]}"},
-            {"Description": "Width (m)", "Value": f"{photometric_params[7]}"},
-            {"Description": "Length (m)", "Value": f"{photometric_params[8]}"},
-            {"Description": "Height (m)", "Value": f"{photometric_params[9]}"},
-            {"Description": "Ballast Factor", "Value": f"{photometric_params[10]}"},
-            {"Description": "Future Use", "Value": f"{photometric_params[11]}"},
-            {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}"}
+            {"Description": "Lamps", "Value": round(photometric_params[0], 1)},
+            {"Description": "Lumens/Lamp", "Value": round(photometric_params[1], 1)},
+            {"Description": "Candela Mult.", "Value": round(photometric_params[2], 1)},
+            {"Description": "Vert Angles", "Value": round(photometric_params[3], 1)},
+            {"Description": "Horiz Angles", "Value": round(photometric_params[4], 1)},
+            {"Description": "Photometric Type", "Value": round(photometric_params[5], 1)},
+            {"Description": "Units Type", "Value": round(photometric_params[6], 1)},
+            {"Description": "Width (m)", "Value": round(photometric_params[7], 1)},
+            {"Description": "Length (m)", "Value": round(photometric_params[8], 1)},
+            {"Description": "Height (m)", "Value": round(photometric_params[9], 1)},
+            {"Description": "Ballast Factor", "Value": round(photometric_params[10], 1)},
+            {"Description": "Future Use", "Value": round(photometric_params[11], 1)},
+            {"Description": "Input Watts [F]", "Value": round(photometric_params[12], 1)}
         ]
         st.table(pd.DataFrame(photometric_table))
 
-        # === IES Derived Values ===
-        st.markdown("#### IES Derived Values")
+        # === Base Values ===
+        st.markdown("#### Base Values")
+
+        default_led_df = st.session_state['dataset']['LED_and_Board_Config']
+        default_led = default_led_df.iloc[0]
+
+        default_tier = default_led['Default Tier']
+        chip_name = default_led['Chip Name']
+        max_led_load_ma = default_led['Max LED Load (mA)']
+        internal_code_tm30 = default_led['Internal Code / TM30']
+
+        # ✅ This is the fixed line
+        led_pitch_mm = default_led['Board Segment LED Pitch (mm) [LB15]']
+
+        actual_led_current_ma = round((input_watts / length_m) * (led_pitch_mm / 1000), 1)
+
         base_values = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
             {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
-            {"Description": "Default Tier / Chip", "LED Base": f"{default_led['Default Tier']} / {default_led['Chip Name']}"},
-            {"Description": "Max LED Load (mA)", "LED Base": f"{default_led['Max LED Load (mA)']}"},
-            {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current}"},
-            {"Description": "TM30 Code", "LED Base": f"{default_led['Internal Code / TM30']}"}
+            {"Description": "Default Tier", "LED Base": default_tier},
+            {"Description": "Chip Name", "LED Base": chip_name},
+            {"Description": "Internal Code / TM30", "LED Base": internal_code_tm30},
+            {"Description": "Max LED Load (mA)", "LED Base": f"{max_led_load_ma:.1f}"},
+            {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current_ma:.1f}"}
         ]
         st.table(pd.DataFrame(base_values))
 
-# === LUMCAT REVERSE LOOKUP ===
-def parse_lumcat(lumcat_code):
-    try:
-        range_code, rest = lumcat_code.split('-')
-        return {
-            "Range": range_code,
-            "Option Code": rest[0:2],
-            "Diffuser Code": rest[2:4],
-            "Wiring Code": rest[4],
-            "Driver Code": rest[5:7],
-            "Lumens (Derived)": round(float(rest[7:10]) * 10, 1),
-            "CRI Code": rest[10:12],
-            "CCT Code": rest[12:14]
-        }
-    except Exception as e:
-        st.error(f"Error parsing LUMCAT: {e}")
-        return None
-
-def lookup_lumcat_descriptions(parsed_codes, matrix_df):
-    matrix_df.columns = matrix_df.columns.str.strip()
-
-    def get_value(df, code_col, desc_col, code):
-        match = df.loc[df[code_col] == code]
-        return match[desc_col].values[0] if not match.empty else "⚠️ Not Found"
-
-    return {
-        'Range': parsed_codes['Range'],
-        'Option Description': get_value(matrix_df, 'Option Code', 'Option Description', parsed_codes['Option Code']),
-        'Diffuser Description': get_value(matrix_df, 'Diffuser / Louvre Code', 'Diffuser / Louvre Description', parsed_codes['Diffuser Code']),
-        'Wiring Description': get_value(matrix_df, 'Wiring Code', 'Wiring Description', parsed_codes['Wiring Code']),
-        'Driver Description': get_value(matrix_df, 'Driver Code', 'Driver Description', parsed_codes['Driver Code']),
-        'Lumens (Derived)': parsed_codes['Lumens (Derived)'],
-        'CRI Description': get_value(matrix_df, 'CRI Code', 'CRI Description', parsed_codes['CRI Code']),
-        'CCT Description': get_value(matrix_df, 'CCT/Colour Code', 'CCT/Colour Description', parsed_codes['CCT Code'])
-    }
-
-# === LUMCAT EXPANDER ===
-with st.expander("🔎 LumCAT Reverse Lookup (Matrix)", expanded=False):
-    lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
-    lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
-
-    lumcat_input = st.text_input("Enter LumCAT Code", value=lumcat_from_meta)
-
-    if lumcat_input:
-        parsed_codes = parse_lumcat(lumcat_input)
-        if parsed_codes:
-            lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
-            if lumcat_desc:
-                st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
-
 # === FOOTER ===
-st.caption("Version 4.7 Clean ✅ - Unified Base Info + LumCAT Reverse Lookup + Confirmed Dataset")
+st.caption("Version 4.7 Clean ✅ - Dataset Upload + Unified Base Info + LumCAT Reverse Lookup")
