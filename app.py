@@ -28,8 +28,8 @@ else:
 # === SIDEBAR ===
 with st.sidebar:
     st.subheader("📁 Linear Lightspec Dataset Upload")
-
     uploaded_excel = st.file_uploader("Upload Dataset Excel", type=["xlsx"])
+
     if uploaded_excel:
         workbook = pd.ExcelFile(uploaded_excel)
         st.session_state['dataset'] = {
@@ -44,11 +44,12 @@ if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
 
-# === PARSE FUNCTIONS ===
+# === PARSE IES FUNCTIONS ===
 def parse_ies_file(file_content):
     lines = file_content.splitlines()
     header_lines, data_lines = [], []
     reading_data = False
+
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("TILT"):
@@ -60,6 +61,7 @@ def parse_ies_file(file_content):
 
     photometric_raw = " ".join(data_lines[:2]).split()
     photometric_params = [float(x) if '.' in x or 'e' in x.lower() else int(x) for x in photometric_raw]
+
     n_vert = int(photometric_params[3])
     n_horz = int(photometric_params[4])
 
@@ -150,8 +152,10 @@ if st.session_state['ies_files']:
 st.markdown("🔎 LumCAT Reverse Lookup (Matrix)")
 
 def parse_lumcat(lumcat_code):
+    """Parses the LumCAT code into its components."""
     try:
         range_code, rest = lumcat_code.split('-')
+
         option_code = rest[0:2]
         diffuser_code = rest[2:4]
         wiring_code = rest[4]
@@ -159,6 +163,7 @@ def parse_lumcat(lumcat_code):
         lumens_code = rest[7:10]
         cri_code = rest[10:12]
         cct_code = rest[12:14]
+
         lumens_derived = round(float(lumens_code) * 10, 1)
 
         return {
@@ -171,15 +176,31 @@ def parse_lumcat(lumcat_code):
             "CRI Code": cri_code,
             "CCT Code": cct_code
         }
+
     except Exception as e:
-        st.error(f"Error parsing LUMCAT: {e}")
+        st.error(f"Error parsing LumCAT code: {e}")
         return None
 
 def lookup_lumcat_descriptions(parsed_codes, matrix_df):
+    """Looks up descriptions from LumCAT_Config sheet."""
     if matrix_df.empty or parsed_codes is None:
         return None
 
     matrix_df.columns = matrix_df.columns.str.strip()
+
+    required_columns = [
+        'Option Code', 'Option Description',
+        'Diffuser / Louvre Code', 'Diffuser / Louvre Description',
+        'Wiring Code', 'Wiring Description',
+        'Driver Code', 'Driver Description',
+        'CRI Code', 'CRI Description',
+        'CCT/Colour Code', 'CCT/Colour Description'
+    ]
+
+    missing_cols = [col for col in required_columns if col not in matrix_df.columns]
+    if missing_cols:
+        st.error(f"❌ Missing columns in LumCAT_Config: {missing_cols}")
+        return None
 
     def get_value(df, code_col, desc_col, code):
         match = df.loc[df[code_col] == code]
@@ -191,7 +212,7 @@ def lookup_lumcat_descriptions(parsed_codes, matrix_df):
         'Diffuser Description': get_value(matrix_df, 'Diffuser / Louvre Code', 'Diffuser / Louvre Description', parsed_codes['Diffuser Code']),
         'Wiring Description': get_value(matrix_df, 'Wiring Code', 'Wiring Description', parsed_codes['Wiring Code']),
         'Driver Description': get_value(matrix_df, 'Driver Code', 'Driver Description', parsed_codes['Driver Code']),
-        'Lumens (Derived)': parsed_codes['Lumens (Derived)'],
+        'Lumens (Derived)': f"{parsed_codes['Lumens (Derived)']} lm",
         'CRI Description': get_value(matrix_df, 'CRI Code', 'CRI Description', parsed_codes['CRI Code']),
         'CCT Description': get_value(matrix_df, 'CCT/Colour Code', 'CCT/Colour Description', parsed_codes['CCT Code'])
     }
@@ -201,9 +222,12 @@ lumcat_input = st.text_input("Enter LumCAT Code", value="B852-BSA3AAA1488030ZZ")
 if lumcat_input:
     parsed_codes = parse_lumcat(lumcat_input)
     lumcat_matrix_df = st.session_state['dataset'].get('LumCAT_Config', pd.DataFrame())
+
     if parsed_codes:
         lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
+
         if lumcat_desc:
+            st.markdown("#### Reverse Lookup Results")
             st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
 
 # === FOOTER ===
