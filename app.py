@@ -183,19 +183,19 @@ if st.session_state['ies_files']:
         # === Photometric Parameters ===
         st.markdown("#### Photometric Parameters")
         photometric_table = [
-            {"Param": "A", "Description": "Lamps", "Value": f"{photometric_params[0]}"},
-            {"Param": "B", "Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
-            {"Param": "C", "Description": "Candela Mult.", "Value": f"{photometric_params[2]}"},
-            {"Param": "D", "Description": "Vert Angles", "Value": f"{photometric_params[3]}"},
-            {"Param": "E", "Description": "Horiz Angles", "Value": f"{photometric_params[4]}"},
-            {"Param": "F", "Description": "Photometric Type", "Value": f"{photometric_params[5]}"},
-            {"Param": "G", "Description": "Units Type", "Value": f"{photometric_params[6]}"},
-            {"Param": "H", "Description": "Width (m)", "Value": f"{photometric_params[7]}"},
-            {"Param": "I", "Description": "Length (m)", "Value": f"{photometric_params[8]}"},
-            {"Param": "J", "Description": "Height (m)", "Value": f"{photometric_params[9]}"},
-            {"Param": "K", "Description": "Ballast Factor", "Value": f"{photometric_params[10]}"},
-            {"Param": "L", "Description": "Future Use", "Value": f"{photometric_params[11]}"},
-            {"Param": "M", "Description": "Input Watts [F]", "Value": f"{photometric_params[12]}"}
+            {"Description": "Lamps", "Value": f"{photometric_params[0]}"},
+            {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
+            {"Description": "Candela Mult.", "Value": f"{photometric_params[2]}"},
+            {"Description": "Vert Angles", "Value": f"{photometric_params[3]}"},
+            {"Description": "Horiz Angles", "Value": f"{photometric_params[4]}"},
+            {"Description": "Photometric Type", "Value": f"{photometric_params[5]}"},
+            {"Description": "Units Type", "Value": f"{photometric_params[6]}"},
+            {"Description": "Width (m)", "Value": f"{photometric_params[7]}"},
+            {"Description": "Length (m)", "Value": f"{photometric_params[8]}"},
+            {"Description": "Height (m)", "Value": f"{photometric_params[9]}"},
+            {"Description": "Ballast Factor", "Value": f"{photometric_params[10]}"},
+            {"Description": "Future Use", "Value": f"{photometric_params[11]}"},
+            {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}"}
         ]
         st.table(pd.DataFrame(photometric_table))
 
