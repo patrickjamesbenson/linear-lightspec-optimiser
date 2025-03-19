@@ -28,7 +28,6 @@ else:
 # === SIDEBAR ===
 with st.sidebar:
     st.subheader("📁 Linear Lightspec Dataset Upload")
-
     uploaded_excel = st.file_uploader("Upload Dataset Excel", type=["xlsx"])
     if uploaded_excel:
         workbook = pd.ExcelFile(uploaded_excel)
@@ -40,8 +39,6 @@ with st.sidebar:
 
 # === FILE UPLOAD: IES FILE ===
 uploaded_file = st.file_uploader("📄 Upload your IES file", type=["ies"])
-lumcat_code_from_file = ""
-
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
@@ -112,52 +109,49 @@ if st.session_state['ies_files']:
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
-    lumcat_code_from_file = meta_dict.get("[LUMCAT]", "")
+    # LED and Board Config Data
+    led_board_df = st.session_state['dataset']['LED_and_Board_Config']
+    default_led = led_board_df.iloc[0]
+    series_leds = default_led["Series LED's"]
+    voltage_per_led = default_led['LED Strip Voltage (SELV)'] / series_leds
+    led_pitch = default_led['LED Pitch (mm)'] / 1000
+    actual_led_current = round((input_watts / length_m) * led_pitch, 1)
 
-    with st.expander("📏 Photometric Parameters + Metadata + Base Values", expanded=False):
+    with st.expander("📏 Photometric Parameters + Metadata + Base Values", expanded=True):
         # === IES Metadata ===
+        meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
         st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
         # === Photometric Parameters ===
         st.markdown("#### Photometric Parameters")
         photometric_table = [
-            {"Param": "A", "Description": "Lamps", "Value": round(photometric_params[0], 1)},
-            {"Param": "B", "Description": "Lumens/Lamp", "Value": round(photometric_params[1], 1)},
-            {"Param": "C", "Description": "Candela Mult.", "Value": round(photometric_params[2], 1)},
-            {"Param": "D", "Description": "Vert Angles", "Value": round(photometric_params[3], 1)},
-            {"Param": "E", "Description": "Horiz Angles", "Value": round(photometric_params[4], 1)},
-            {"Param": "F", "Description": "Photometric Type", "Value": round(photometric_params[5], 1)},
-            {"Param": "G", "Description": "Units Type", "Value": round(photometric_params[6], 1)},
-            {"Param": "H", "Description": "Width (m)", "Value": round(photometric_params[7], 1)},
-            {"Param": "I", "Description": "Length (m)", "Value": round(photometric_params[8], 1)},
-            {"Param": "J", "Description": "Height (m)", "Value": round(photometric_params[9], 1)},
-            {"Param": "K", "Description": "Ballast Factor", "Value": round(photometric_params[10], 1)},
-            {"Param": "L", "Description": "Future Use", "Value": round(photometric_params[11], 1)},
-            {"Param": "M", "Description": "Input Watts [F]", "Value": round(photometric_params[12], 1)}
+            {"Param": "A", "Description": "Lamps", "Value": f"{photometric_params[0]:.1f}"},
+            {"Param": "B", "Description": "Lumens/Lamp", "Value": f"{photometric_params[1]:.1f}"},
+            {"Param": "C", "Description": "Candela Mult.", "Value": f"{photometric_params[2]:.1f}"},
+            {"Param": "D", "Description": "Vert Angles", "Value": f"{photometric_params[3]:.1f}"},
+            {"Param": "E", "Description": "Horiz Angles", "Value": f"{photometric_params[4]:.1f}"},
+            {"Param": "F", "Description": "Photometric Type", "Value": f"{photometric_params[5]:.1f}"},
+            {"Param": "G", "Description": "Units Type", "Value": f"{photometric_params[6]:.1f}"},
+            {"Param": "H", "Description": "Width (m)", "Value": f"{photometric_params[7]:.3f}"},
+            {"Param": "I", "Description": "Length (m)", "Value": f"{photometric_params[8]:.3f}"},
+            {"Param": "J", "Description": "Height (m)", "Value": f"{photometric_params[9]:.3f}"},
+            {"Param": "K", "Description": "Ballast Factor", "Value": f"{photometric_params[10]:.1f}"},
+            {"Param": "L", "Description": "Future Use", "Value": f"{photometric_params[11]:.1f}"},
+            {"Param": "M", "Description": "Input Watts [F]", "Value": f"{photometric_params[12]:.1f}"}
         ]
         st.table(pd.DataFrame(photometric_table))
 
         # === Base Values ===
         st.markdown("#### Base Values")
-        led_board_df = st.session_state['dataset']['LED_and_Board_Config']
-        default_led = led_board_df.iloc[0]
-
-        # Computed actual mA load: (Input Watts / Length) * LED Pitch / Voltage Per LED
-        series_leds = default_led['Series LED\'s']
-        voltage_per_led = default_led['LED Strip Voltage (SELV)'] / series_leds
-        led_pitch = default_led['LED Pitch (mm)'] / 1000
-        actual_led_current = round((input_watts / length_m) * led_pitch / voltage_per_led, 1)
-
         base_values = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
             {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
-            {"Description": "Default Tier / Chip Name / Max LED Stress / Actual mA / TM",
-             "LED Base": f"{default_led['Default Tier']} / {default_led['Chip Name']} / "
-                         f"{default_led['Max LED Stress (mA)']} mA / {actual_led_current} mA / "
-                         f"{default_led['Internal Code / TM30']}"}
+            {"Description": "Default Tier / Chip Name", "LED Base": f"{default_led['Default Tier']} / {default_led['Chip Name']}"},
+            {"Description": "Max LED Stress (mA)", "LED Base": f"{default_led['Max LED Stress (mA)']}"},
+            {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current}"},
+            {"Description": "Internal Code / TM30", "LED Base": f"{default_led['Internal Code / TM30']}"}
         ]
         st.table(pd.DataFrame(base_values))
 
@@ -196,11 +190,8 @@ with st.expander("🔎 LumCAT Reverse Lookup (Matrix)", expanded=False):
         matrix_df.columns = matrix_df.columns.str.strip()
 
         def get_value(df, code_col, desc_col, code):
-            try:
-                match = df.loc[df[code_col] == code]
-                return match[desc_col].values[0] if not match.empty else "⚠️ Not Found"
-            except KeyError:
-                return "⚠️ Invalid Column"
+            match = df.loc[df[code_col] == code]
+            return match[desc_col].values[0] if not match.empty else "⚠️ Not Found"
 
         return {
             'Range': parsed_codes['Range'],
@@ -213,11 +204,12 @@ with st.expander("🔎 LumCAT Reverse Lookup (Matrix)", expanded=False):
             'CCT Description': get_value(matrix_df, 'CCT/Colour Code', 'CCT/Colour Description', parsed_codes['CCT Code'])
         }
 
-    lumcat_input = st.text_input("Enter LumCAT Code", value=lumcat_code_from_file)
+    lumcat_matrix_df = st.session_state['dataset'].get('LumCAT_Config', pd.DataFrame())
+    lumcat_code_from_ies = meta_dict.get("[LUMCAT]", "")
 
+    lumcat_input = st.text_input("Enter LumCAT Code", value=lumcat_code_from_ies)
     if lumcat_input:
         parsed_codes = parse_lumcat(lumcat_input)
-        lumcat_matrix_df = st.session_state['dataset'].get('LumCAT_Config', pd.DataFrame())
         if parsed_codes:
             lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
             if lumcat_desc:
