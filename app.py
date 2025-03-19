@@ -185,7 +185,7 @@ if st.session_state['ies_files']:
         st.markdown("#### IES Metadata")
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
- # === Photometric Parameters ===
+# === Photometric Parameters ===
 st.markdown("#### Photometric Parameters")
 
 photometric_table = [
@@ -205,6 +205,7 @@ photometric_table = [
 ]
 
 st.table(pd.DataFrame(photometric_table))
+
 
 
         # === Base Values ===
