@@ -119,6 +119,7 @@ def parse_lumcat(lumcat_code):
             "Wiring Code": wiring_code,
             "Driver Code": driver_code,
             "Lumens Derived Display": lumens_derived_display,
+            "Lumens Code": lumens_code,
             "CRI Code": cri_code,
             "CCT Code": cct_code
         }
@@ -131,25 +132,20 @@ def lookup_lumcat_descriptions(parsed_codes, matrix_df):
     if matrix_df.empty or parsed_codes is None:
         return None
 
-    result = {}
-    result['Range'] = parsed_codes['Range']
+    def safe_lookup(df, code_col, desc_col, code):
+        match = df.loc[df[code_col] == code]
+        return match[desc_col].values[0] if not match.empty else "⚠️ Not Found"
 
-    option_match = matrix_df.loc[matrix_df['Option Code'] == parsed_codes['Option Code']]
-    diffuser_match = matrix_df.loc[matrix_df['Diffuser / Louvre Code'] == parsed_codes['Diffuser Code']]
-    wiring_match = matrix_df.loc[matrix_df['Wiring Code'] == parsed_codes['Wiring Code']]
-    driver_match = matrix_df.loc[matrix_df['Driver Code'] == parsed_codes['Driver Code']]
-    cri_match = matrix_df.loc[matrix_df['CRI Code'] == parsed_codes['CRI Code']]
-    cct_match = matrix_df.loc[matrix_df['CCT/Colour Code'] == parsed_codes['CCT Code']]
-
-    result['Option Description'] = option_match['Option Description'].values[0] if not option_match.empty else "⚠️ Not Found"
-    result['Diffuser Description'] = diffuser_match['Diffuser / Louvre Description'].values[0] if not diffuser_match.empty else "⚠️ Not Found"
-    result['Wiring Description'] = wiring_match['Wiring Description'].values[0] if not wiring_match.empty else "⚠️ Not Found"
-    result['Driver Description'] = driver_match['Driver Description'].values[0] if not driver_match.empty else "⚠️ Not Found"
-    result['Lumens (Display Only)'] = f"{parsed_codes['Lumens Derived Display']} lm"
-    result['CRI Description'] = cri_match['CRI Description'].values[0] if not cri_match.empty else "⚠️ Not Found"
-    result['CCT Description'] = cct_match['CCT/Colour Description'].values[0] if not cct_match.empty else "⚠️ Not Found"
-
-    return result
+    return {
+        'Range': parsed_codes['Range'],
+        f"Option Code ({parsed_codes['Option Code']})": safe_lookup(matrix_df, 'Option Code', 'Option Description', parsed_codes['Option Code']),
+        f"Diffuser Code ({parsed_codes['Diffuser Code']})": safe_lookup(matrix_df, 'Diffuser / Louvre Code', 'Diffuser / Louvre Description', parsed_codes['Diffuser Code']),
+        f"Wiring Code ({parsed_codes['Wiring Code']})": safe_lookup(matrix_df, 'Wiring Code', 'Wiring Description', parsed_codes['Wiring Code']),
+        f"Driver Code ({parsed_codes['Driver Code']})": safe_lookup(matrix_df, 'Driver Code', 'Driver Description', parsed_codes['Driver Code']),
+        f"Lumens Code ({parsed_codes['Lumens Code']})": f"{parsed_codes['Lumens Derived Display']} lm",
+        f"CRI Code ({parsed_codes['CRI Code']})": safe_lookup(matrix_df, 'CRI Code', 'CRI Description', parsed_codes['CRI Code']),
+        f"CCT Code ({parsed_codes['CCT Code']})": safe_lookup(matrix_df, 'CCT/Colour Code', 'CCT/Colour Description', parsed_codes['CCT Code'])
+    }
 
 # === MAIN DISPLAY ===
 if st.session_state['ies_files']:
@@ -174,7 +170,6 @@ if st.session_state['ies_files']:
     led_pitch_mm = default_led['Board Segment LED Pitch (mm) [LB15]']
     led_strip_voltage = default_led['LED Strip Voltage (SELV)']
 
-    # ✅ New Formula
     actual_led_current_ma = round((input_watts / led_strip_voltage) / led_pitch_mm * 1000, 1)
 
     with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
@@ -226,7 +221,7 @@ if st.session_state['ies_files']:
             if parsed_codes:
                 lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
                 if lumcat_desc:
-                    st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
+                    st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field (Code)", "Value"]))
 
 # === FOOTER ===
 st.caption("Version 4.7 Clean ✅ - Unified Base Info + LumCAT Reverse Lookup + Confirmed Dataset")
