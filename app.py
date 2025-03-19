@@ -177,43 +177,44 @@ if st.session_state['ies_files']:
     input_power_per_meter = input_watts / length_m
     actual_led_current_ma = round((input_power_per_meter / led_forward_voltage) * 1000, 1)
 
-    with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
-        meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
+with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
+    meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
 
-        st.markdown("#### IES Metadata")
-        st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
+    st.markdown("#### IES Metadata")
+    st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-        st.markdown("#### IES Parameters")
-        photometric_table = [
-            {"Description": "Lamps", "Value": f"{photometric_params[0]}"},
-            {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
-            {"Description": "Candela Mult.", "Value": f"{photometric_params[2]}"},
-            {"Description": "Vert Angles", "Value": f"{photometric_params[3]}"},
-            {"Description": "Horiz Angles", "Value": f"{photometric_params[4]}"},
-            {"Description": "Photometric Type", "Value": f"{photometric_params[5]}"},
-            {"Description": "Units Type", "Value": f"{photometric_params[6]}"},
-            {"Description": "Width (m)", "Value": f"{photometric_params[7]}"},
-            {"Description": "Length (m)", "Value": f"{photometric_params[8]}"},
-            {"Description": "Height (m)", "Value": f"{photometric_params[9]}"},
-            {"Description": "Ballast Factor", "Value": f"{photometric_params[10]}"},
-            {"Description": "Future Use", "Value": f"{photometric_params[11]}"},
-            {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}"}
-        ]
-        st.table(pd.DataFrame(photometric_table))
+    st.markdown("#### IES Parameters")
+    photometric_table = [
+        {"Description": "Lamps", "Value": f"{photometric_params[0]}"},
+        {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
+        {"Description": "Candela Mult.", "Value": f"{photometric_params[2]}"},
+        {"Description": "Vert Angles", "Value": f"{photometric_params[3]}"},
+        {"Description": "Horiz Angles", "Value": f"{photometric_params[4]}"},
+        {"Description": "Photometric Type", "Value": f"{photometric_params[5]}"},
+        {"Description": "Units Type", "Value": f"{photometric_params[6]}"},
+        {"Description": "Width (m)", "Value": f"{photometric_params[7]}"},
+        {"Description": "Length (m)", "Value": f"{photometric_params[8]}"},
+        {"Description": "Height (m)", "Value": f"{photometric_params[9]}"},
+        {"Description": "Ballast Factor", "Value": f"{photometric_params[10]}"},
+        {"Description": "Future Use", "Value": f"{photometric_params[11]}"},
+        {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}"}
+    ]
+    st.table(pd.DataFrame(photometric_table))
 
-        st.markdown("#### IES Derived Values")
-        base_values = [
-            {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
-            {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
-            {"Description": "Default Tier / Chip", "LED Base": f"{default_tier} / {chip_name}"},
-            {"Description": "Max LED Load (mA)", "LED Base": f"{max_led_load_ma:.1f}"},
-            {"Description": "LED Pitch (mm)", "LED Base": f"{led_pitch_mm:.1f}"},
-            {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current_ma:.1f}"},
-            {"Description": "TM30 Code", "LED Base": f"{internal_code_tm30}"}
-        ]
-        st.table(pd.DataFrame(base_values))
-
+    st.markdown("#### IES Derived Values")
+    base_values = [
+        {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
+        {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
+        {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
+        {"Description": "Default Tier / Chip", "LED Base": f"{default_tier} / {chip_name}"},
+        {"Description": "Max LED Load (mA)", "LED Base": f"{max_led_load_ma:.1f}"},
+        {"Description": "LED Pitch (mm)", "LED Base": f"{led_pitch_mm:.1f}"},
+        # Changed formula here
+        {"Description": "Actual LED Current (mA)", "LED Base": f"{(input_watts / led_pitch_mm) * 1000:.1f}"},
+        {"Description": "TM30 Code", "LED Base": f"{internal_code_tm30}"}
+    ]
+    st.table(pd.DataFrame(base_values))
+    
         # === LumCAT Lookup ===
         st.markdown("#### 🔎 LumCAT Reverse Lookup (Matrix)")
         lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
