@@ -5,7 +5,7 @@ import os
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Linear Lightspec Optimiser", layout="wide")
-st.title("Linear Lightspec Optimiser v4.7 ✅")
+st.title("Linear Lightspec Optimiser v4.7 Clean ✅")
 
 # === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
@@ -28,7 +28,6 @@ else:
 # === SIDEBAR ===
 with st.sidebar:
     st.subheader("📁 Linear Lightspec Dataset Upload")
-
     uploaded_excel = st.file_uploader("Upload Dataset Excel", type=["xlsx"])
     if uploaded_excel:
         workbook = pd.ExcelFile(uploaded_excel)
@@ -158,6 +157,29 @@ if st.session_state['ies_files']:
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
+    # === Get LED board default for Actual LED Current ===
+    led_board_df = st.session_state['dataset']['LED_and_Board_Config']
+    default_led = led_board_df.iloc[0] if not led_board_df.empty else None
+
+    actual_led_current = 0
+    max_led_stress = 0
+    chip_name = ""
+    default_tier = ""
+    tm30_code = ""
+
+    if default_led is not None:
+        try:
+            series_leds = default_led["Series LED's"]
+            voltage_per_led = default_led['LED Strip Voltage (SELV)'] / series_leds
+            led_pitch = default_led['LED Pitch (mm)'] / 1000
+            actual_led_current = round((input_watts / length_m) * led_pitch, 1)
+            max_led_stress = default_led['Max LED Load (mA)']
+            chip_name = default_led['Chip Name']
+            default_tier = default_led['Default Tier']
+            tm30_code = default_led['Internal Code / TM30']
+        except Exception as e:
+            st.error(f"LED Board Calc Error: {e}")
+
     with st.expander("📏 Photometric Parameters + Metadata + Base Values", expanded=True):
         # === IES Metadata ===
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
@@ -188,7 +210,12 @@ if st.session_state['ies_files']:
         base_values = [
             {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
             {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"}
+            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
+            {"Description": "Default Tier", "LED Base": default_tier},
+            {"Description": "Chip Name", "LED Base": chip_name},
+            {"Description": "Max LED Load (mA)", "LED Base": max_led_stress},
+            {"Description": "Actual LED Current (mA)", "LED Base": actual_led_current},
+            {"Description": "Internal Code / TM30", "LED Base": tm30_code}
         ]
         st.table(pd.DataFrame(base_values))
 
