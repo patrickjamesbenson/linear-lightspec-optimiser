@@ -172,10 +172,10 @@ if st.session_state['ies_files']:
     max_led_load_ma = default_led['Max LED Load (mA)']
     internal_code_tm30 = default_led['Internal Code / TM30']
     led_pitch_mm = default_led['Board Segment LED Pitch (mm) [LB15]']
-    led_forward_voltage = default_led['LED Forward Voltage (V) [LB6]']
+    led_strip_voltage = default_led['LED Strip Voltage (SELV)']
 
-    # NEW FORMULA FOR CURRENT PER LED BASED ON TOTAL WATTAGE AND LED PITCH
-    actual_led_current_ma = round((input_watts / led_pitch_mm) * 1000, 1)
+    # ✅ New Formula
+    actual_led_current_ma = round((input_watts / led_strip_voltage) / led_pitch_mm * 1000, 1)
 
     with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
