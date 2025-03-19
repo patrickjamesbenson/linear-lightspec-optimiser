@@ -201,6 +201,7 @@ if st.session_state['ies_files']:
             {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
             {"Description": "Default Tier / Chip", "LED Base": f"{default_led['Default Tier']} / {default_led['Chip Name']}"},
             {"Description": "Max LED Load (mA)", "LED Base": f"{default_led['Max LED Load (mA)']}"},
+            {"Description": "LED Pitch (mm)", "LED Base": f"{led_pitch_mm:.1f}"},
             {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current}"},
             {"Description": "TM30 Code", "LED Base": f"{default_led['Internal Code / TM30']}"}
         ]
