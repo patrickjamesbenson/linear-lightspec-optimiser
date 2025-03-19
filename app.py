@@ -101,13 +101,15 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 def parse_lumcat(lumcat_code):
     try:
         range_code, rest = lumcat_code.split('-')
-        option_code = rest[1:2]
-        diffuser_code = rest[3:4]
-        wiring_code = rest[5]
-        driver_code = rest[6:7]
-        lumens_code = rest[8:10]
-        cri_code = rest[11:12]
-        cct_code = rest[13:14]
+        return {
+            "Range": range_code,
+            "Option Code": rest[0:2],
+            "Diffuser Code": rest[2:4],
+            "Wiring Code": rest[5],
+            "Driver Code": rest[5:7],
+            "Lumens (Derived)": round(float(rest[7:10]) * 10, 1),
+            "CRI Code": rest[10:12],
+            "CCT Code": rest[12:14]
 
         lumens_derived_display = round(float(lumens_code) * 10, 1)
 
