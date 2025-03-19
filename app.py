@@ -149,16 +149,16 @@ led_forward_voltage = default_led['LED Forward Voltage (V) [LB6]']
 input_power_per_meter = input_watts / length_m
 actual_led_current_ma = round((input_power_per_meter / led_forward_voltage) * 1000, 1)
 
-        base_values = [
-            {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
-            {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
-            {"Description": "Default Tier", "LED Base": default_tier},
-            {"Description": "Chip Name", "LED Base": chip_name},
-            {"Description": "Internal Code / TM30", "LED Base": internal_code_tm30},
-            {"Description": "Max LED Load (mA)", "LED Base": f"{max_led_load_ma:.1f}"},
-            {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current_ma:.1f}"}
-        ]
+base_values = [
+    {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
+    {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
+    {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
+    {"Description": "Default Tier", "LED Base": default_tier},
+    {"Description": "Chip Name", "LED Base": chip_name},
+    {"Description": "Internal Code / TM30", "LED Base": internal_code_tm30},
+    {"Description": "Max LED Load (mA)", "LED Base": f"{max_led_load_ma:.1f}"},
+    {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current_ma:.1f}"}
+]
         st.table(pd.DataFrame(base_values))
 
 # === FOOTER ===
