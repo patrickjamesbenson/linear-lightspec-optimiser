@@ -107,11 +107,14 @@ def get_tier_values(tier_name):
     tier_rules = st.session_state['dataset']['Tier_Rules_Config']
     led_chip_config = st.session_state['dataset']['LED_and_Board_Config']
 
-    # Filter rows with Default == 'Yes' for Tier Rules and LED Chip Config
+    # Filter rows with Default == 'Yes'
     tier_row_rules = tier_rules[tier_rules['Default'].astype(str).str.lower() == 'yes']
     led_chip_row = led_chip_config[led_chip_config['Default'].astype(str).str.lower() == 'yes']
 
-    # Validate single selection
+    # Debug info
+    st.write("Tier Rules Defaults:", tier_row_rules)
+    st.write("LED Chip Defaults:", led_chip_row)
+
     if tier_row_rules.empty or led_chip_row.empty:
         st.error("Default row not found in Tier_Rules_Config or LED_Chip_Config")
         return {}
@@ -119,6 +122,7 @@ def get_tier_values(tier_name):
     tier_row_rules = tier_row_rules.iloc[0]
     led_chip_row = led_chip_row.iloc[0]
 
+    # Return mapped values
     return {
         'Default Tier': tier_row_rules['Tier'],
         'Chip Name': led_chip_row['Chip_Name'],
@@ -144,44 +148,47 @@ if st.session_state['ies_files']:
 
     tier_values = get_tier_values("Core")
 
-    actual_led_current_ma = round((input_watts / tier_values['LED Strip Voltage']) / tier_values['Board Segment LED Pitch'] * 1000, 1)
+    if tier_values:
+        actual_led_current_ma = round(
+            (input_watts / tier_values['LED Strip Voltage']) / tier_values['Board Segment LED Pitch'] * 1000, 1
+        )
 
-    with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
-        meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
+        with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
+            meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
 
-        st.markdown("#### IES Metadata")
-        st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
+            st.markdown("#### IES Metadata")
+            st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-        st.markdown("#### IES Parameters")
-        photometric_table = [
-            {"Description": "Lamps", "Value": f"{photometric_params[0]}"},
-            {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
-            {"Description": "Candela Mult.", "Value": f"{photometric_params[2]}"},
-            {"Description": "Vert Angles", "Value": f"{photometric_params[3]}"},
-            {"Description": "Horiz Angles", "Value": f"{photometric_params[4]}"},
-            {"Description": "Photometric Type", "Value": f"{photometric_params[5]}"},
-            {"Description": "Units Type", "Value": f"{photometric_params[6]}"},
-            {"Description": "Width (m)", "Value": f"{photometric_params[7]}"},
-            {"Description": "Length (m)", "Value": f"{photometric_params[8]}"},
-            {"Description": "Height (m)", "Value": f"{photometric_params[9]}"},
-            {"Description": "Ballast Factor", "Value": f"{photometric_params[10]}"},
-            {"Description": "Future Use", "Value": f"{photometric_params[11]}"},
-            {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}"}
-        ]
-        st.table(pd.DataFrame(photometric_table))
+            st.markdown("#### IES Parameters")
+            photometric_table = [
+                {"Description": "Lamps", "Value": f"{photometric_params[0]}"},
+                {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
+                {"Description": "Candela Mult.", "Value": f"{photometric_params[2]}"},
+                {"Description": "Vert Angles", "Value": f"{photometric_params[3]}"},
+                {"Description": "Horiz Angles", "Value": f"{photometric_params[4]}"},
+                {"Description": "Photometric Type", "Value": f"{photometric_params[5]}"},
+                {"Description": "Units Type", "Value": f"{photometric_params[6]}"},
+                {"Description": "Width (m)", "Value": f"{photometric_params[7]}"},
+                {"Description": "Length (m)", "Value": f"{photometric_params[8]}"},
+                {"Description": "Height (m)", "Value": f"{photometric_params[9]}"},
+                {"Description": "Ballast Factor", "Value": f"{photometric_params[10]}"},
+                {"Description": "Future Use", "Value": f"{photometric_params[11]}"},
+                {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}"}
+            ]
+            st.table(pd.DataFrame(photometric_table))
 
-        st.markdown("#### IES Derived Values")
-        base_values = [
-            {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
-            {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
-            {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
-            {"Description": "Default Tier / Chip", "LED Base": f"{tier_values['Default Tier']} / {tier_values['Chip Name']}"},
-            {"Description": "Max LED Load (mA)", "LED Base": f"{tier_values['Max LED Load (mA)']:.1f}"},
-            {"Description": "LED Pitch (mm)", "LED Base": f"{tier_values['Board Segment LED Pitch']:.1f}"},
-            {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current_ma:.1f}"},
-            {"Description": "TM30 Code", "LED Base": f"{tier_values['Internal Code / TM30']}"}
-        ]
-        st.table(pd.DataFrame(base_values))
+            st.markdown("#### IES Derived Values")
+            base_values = [
+                {"Description": "Total Lumens", "LED Base": f"{calculated_lumens:.1f}"},
+                {"Description": "Efficacy (lm/W)", "LED Base": f"{base_lm_per_watt:.1f}"},
+                {"Description": "Lumens per Meter", "LED Base": f"{base_lm_per_m:.1f}"},
+                {"Description": "Default Tier / Chip", "LED Base": f"{tier_values['Default Tier']} / {tier_values['Chip Name']}"},
+                {"Description": "Max LED Load (mA)", "LED Base": f"{tier_values['Max LED Load (mA)']:.1f}"},
+                {"Description": "LED Pitch (mm)", "LED Base": f"{tier_values['Board Segment LED Pitch']:.1f}"},
+                {"Description": "Actual LED Current (mA)", "LED Base": f"{actual_led_current_ma:.1f}"},
+                {"Description": "TM30 Code", "LED Base": f"{tier_values['Internal Code / TM30']}"}
+            ]
+            st.table(pd.DataFrame(base_values))
 
 # === FOOTER ===
 st.caption("Version 4.8 - Unified Base Info + LumCAT Lookup + Customer Builder")
