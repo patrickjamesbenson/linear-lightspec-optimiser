@@ -13,6 +13,8 @@ if 'ies_files' not in st.session_state:
     st.session_state['ies_files'] = []
 if 'dataset' not in st.session_state:
     st.session_state['dataset'] = {}
+if 'customer_entries' not in st.session_state:
+    st.session_state['customer_entries'] = []
 
 # === DEFAULT DATASET LOAD ===
 default_excel_path = 'Linear_Data.xlsx'
@@ -118,10 +120,10 @@ def get_tier_values():
     return {
         'Default Tier': tier_row_rules['Tier'],
         'Chip Name': led_chip_row['Chip_Name'],
-        'Max LED Load (mA)': led_chip_row['Max LED Load (mA)'],
-        'Internal Code / TM30': led_chip_row['Internal Code / TM30'],
-        'Board Segment LED Pitch': tier_row_rules['Series LED Pitch (mm)'],
-        'LED Strip Voltage': led_chip_row['LED Strip Voltage (SELV)']
+        'Max LED Load (mA)': led_chip_row['Max_LED_Load_(mA)'],
+        'Internal Code / TM30': led_chip_row['Internal_Code_TM30'],
+        'Board Segment LED Pitch': tier_row_rules['Series_LED_Pitch_(mm)'],
+        'LED Strip Voltage': led_chip_row['LED_Strip_Voltage_(SELV)']
     }
 
 # === MAIN DISPLAY ===
@@ -142,7 +144,8 @@ if st.session_state['ies_files']:
 
     if tier_values:
         actual_led_current_ma = round(
-            (input_watts / tier_values['LED Strip Voltage']) / tier_values['Board Segment LED Pitch'] * 1000, 1
+            (input_watts / tier_values['LED Strip Voltage']) /
+            tier_values['Board Segment LED Pitch'] * 1000, 1
         )
 
         with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
@@ -183,4 +186,4 @@ if st.session_state['ies_files']:
             st.table(pd.DataFrame(base_values))
 
 # === FOOTER ===
-st.caption("Version 4.8 - Unified Base Info + LumCAT Lookup")
+st.caption("Version 4.8 - Unified Base Info + LumCAT Lookup + Customer Builder")
