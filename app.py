@@ -49,6 +49,59 @@ if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
 
+# === PARSE FUNCTIONS ===
+def parse_ies_file(file_content):
+    lines = file_content.splitlines()
+    header_lines, data_lines = [], []
+    reading_data = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("TILT"):
+            reading_data = True
+        elif not reading_data:
+            header_lines.append(stripped)
+        else:
+            data_lines.append(stripped)
+
+    photometric_raw = " ".join(data_lines[:2]).split()
+    photometric_params = [float(x) if '.' in x or 'e' in x.lower() else int(x) for x in photometric_raw]
+    n_vert = int(photometric_params[3])
+    n_horz = int(photometric_params[4])
+
+    remaining_data = " ".join(data_lines[2:]).split()
+    vertical_angles = [float(x) for x in remaining_data[:n_vert]]
+    horizontal_angles = [float(x) for x in remaining_data[n_vert:n_vert + n_horz]]
+
+    candela_values = remaining_data[n_vert + n_horz:]
+    candela_matrix = []
+    idx = 0
+    for _ in range(n_horz):
+        row = [float(candela_values[idx + i]) for i in range(n_vert)]
+        candela_matrix.append(row)
+        idx += n_vert
+
+    return header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix
+
+def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix, symmetry_factor=4):
+    vert_rad = np.radians(vertical_angles)
+    delta_vert = np.diff(vert_rad)
+    delta_vert = np.append(delta_vert, delta_vert[-1])
+
+    symmetry_range_rad = np.radians(horizontal_angles[-1] - horizontal_angles[0])
+    num_horz_segments = len(horizontal_angles)
+    uniform_delta_horz = symmetry_range_rad / num_horz_segments
+
+    total_flux = 0.0
+    for h_idx in range(num_horz_segments):
+        candela_row = candela_matrix[h_idx]
+        for v_idx, cd in enumerate(candela_row):
+            theta = vert_rad[v_idx]
+            d_theta = delta_vert[v_idx]
+            flux = cd * np.sin(theta) * d_theta * uniform_delta_horz
+            total_flux += flux
+
+    return round(total_flux * symmetry_factor, 1)
+
 # === TIER LOOKUP FUNCTION ===
 def get_tier_values(tier_name):
     tier_rules = st.session_state['dataset']['Tier_Rules_Config']
@@ -77,7 +130,9 @@ if st.session_state['ies_files']:
     input_watts = photometric_params[12]
     length_m = photometric_params[8]
 
-    # Default lookup for Core Tier
+    base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
+    base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
+
     tier_values = get_tier_values("Core")
 
     actual_led_current_ma = round((input_watts / tier_values['LED Strip Voltage']) / tier_values['Board Segment LED Pitch'] * 1000, 1)
