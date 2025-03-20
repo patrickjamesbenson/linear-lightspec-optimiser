@@ -22,8 +22,8 @@ if os.path.exists(default_excel_path):
     workbook = pd.ExcelFile(default_excel_path)
     st.session_state['dataset'] = {
         'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
-        'LED_and_Board_Config': pd.read_excel(workbook, 'LED_Board'),  # Sheet renamed
-        'ECG_Config': pd.read_excel(workbook, 'ECG_Tables')            # Sheet renamed
+        'LED_and_Board_Config': pd.read_excel(workbook, 'LED_Chip_Config'),  # Updated to correct sheet
+        'ECG_Config': pd.read_excel(workbook, 'ECG_Config')                  # Correct sheet
     }
 else:
     st.warning("⚠️ Default dataset not found! Please upload manually.")
@@ -37,11 +37,17 @@ with st.sidebar:
         workbook = pd.ExcelFile(uploaded_excel)
         st.session_state['dataset'] = {
             'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
-            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_Board'),  # Sheet renamed
-            'ECG_Config': pd.read_excel(workbook, 'ECG_Tables')            # Sheet renamed
+            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_Chip_Config'),  # Updated to correct sheet
+            'ECG_Config': pd.read_excel(workbook, 'ECG_Config')                  # Correct sheet
         }
 
 # === FILE UPLOAD: IES FILE ===
+uploaded_file = st.file_uploader("📄 Upload IES file", type=["ies"])
+if uploaded_file:
+    file_content = uploaded_file.read().decode('utf-8')
+    st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
+
+# === PARSE FUNCTIONS ===
 uploaded_file = st.file_uploader("📄 Upload IES file", type=["ies"])
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
