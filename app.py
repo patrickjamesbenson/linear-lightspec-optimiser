@@ -6,7 +6,7 @@ from datetime import datetime
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Evolt Linear Optimiser", layout="wide")
-st.title("Evolt Linear Optimiser v4.8")
+st.title("Evolt Linear Optimiser v5")
 
 # === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
@@ -293,4 +293,4 @@ else:
     st.info("No luminaires added yet.")
 
 # === FOOTER ===
-st.caption("Version 4.8 - Unified Base Info + LumCAT Lookup + Customer Builder")
+st.caption("Version 5 - Unified Base Info + LumCAT Lookup + Customer Builder")
