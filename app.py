@@ -107,15 +107,24 @@ def get_tier_values(tier_name):
     tier_rules = st.session_state['dataset']['Tier_Rules_Config']
     led_chip_config = st.session_state['dataset']['LED_and_Board_Config']
 
-    tier_row_rules = tier_rules[tier_rules['Tier'] == tier_name].iloc[0]
-    led_chip_row = led_chip_config[led_chip_config['Tier'] == tier_name].iloc[0]
+    # Filter rows with Default == 'Yes' for Tier Rules and LED Chip Config
+    tier_row_rules = tier_rules[tier_rules['Default'].astype(str).str.lower() == 'yes']
+    led_chip_row = led_chip_config[led_chip_config['Default'].astype(str).str.lower() == 'yes']
+
+    # Validate single selection
+    if tier_row_rules.empty or led_chip_row.empty:
+        st.error("Default row not found in Tier_Rules_Config or LED_Chip_Config")
+        return {}
+
+    tier_row_rules = tier_row_rules.iloc[0]
+    led_chip_row = led_chip_row.iloc[0]
 
     return {
-        'Default Tier': tier_row_rules['Default'],
+        'Default Tier': tier_row_rules['Tier'],
         'Chip Name': led_chip_row['Chip Name'],
         'Max LED Load (mA)': led_chip_row['Max LED Load (mA)'],
         'Internal Code / TM30': led_chip_row['Internal Code / TM30'],
-        'Board Segment LED Pitch': tier_row_rules['Board Segment LED Pitch (mm)'],
+        'Board Segment LED Pitch': tier_row_rules['Series LED Pitch (mm)'],
         'LED Strip Voltage': led_chip_row['LED Strip Voltage (SELV)']
     }
 
@@ -173,55 +182,6 @@ if st.session_state['ies_files']:
             {"Description": "TM30 Code", "LED Base": f"{tier_values['Internal Code / TM30']}"}
         ]
         st.table(pd.DataFrame(base_values))
-
-        st.markdown("#### 🔎 LumCAT Lookup")
-        lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
-        lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
-
-        lumcat_input = st.text_input("Enter LumCAT Code", value=lumcat_from_meta)
-
-        if lumcat_input:
-            parsed_codes = parse_lumcat(lumcat_input)
-            if parsed_codes:
-                lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
-                if lumcat_desc:
-                    st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
-
-# === CUSTOMER LUMINAIRE BUILDER ===
-st.subheader("🔨 Customer Luminaire Builder")
-
-with st.form("luminaire_entry_form"):
-    luminaire_name = st.text_input("Luminaire Name")
-    tier_selection = st.selectbox("Select Tier", ["Core", "Professional", "Advanced"])
-    length_input = st.number_input("Enter Required Length (mm)", min_value=280, step=10)
-    notes_input = st.text_input("Notes (e.g., Room Name, Mounting Type)")
-    submitted = st.form_submit_button("Add to Table")
-
-    if submitted:
-        new_entry = {
-            'Luminaire Name': luminaire_name,
-            'Tier': tier_selection,
-            'Selected Length (mm)': length_input,
-            'Notes': notes_input,
-            'Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-        st.session_state['customer_entries'].append(new_entry)
-        st.success("Luminaire added to table.")
-
-st.markdown("### Current Luminaire Selections")
-if st.session_state['customer_entries']:
-    customer_df = pd.DataFrame(st.session_state['customer_entries'])
-    st.dataframe(customer_df)
-
-    csv = customer_df.to_csv(index=False)
-    st.download_button(
-        label="Download CSV",
-        data=csv,
-        file_name=f"luminaire_selections_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-        mime="text/csv"
-    )
-else:
-    st.info("No luminaires added yet.")
 
 # === FOOTER ===
 st.caption("Version 4.8 - Unified Base Info + LumCAT Lookup + Customer Builder")
