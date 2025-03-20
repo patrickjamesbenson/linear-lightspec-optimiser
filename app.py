@@ -7,14 +7,6 @@ from datetime import datetime
 
 # === CONFIG ===
 ADMIN_PASSWORD = "your_secure_password"  # Replace with your secure password
-GOOGLE_SHEET_URLS = {
-    'LumCAT_Config': 'https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/export?format=csv&gid=0',
-    'ECG_Config': 'https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/export?format=csv&gid=123456',
-    'Tier_Rules_Config': 'https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/export?format=csv&gid=234567',
-    'LED_Chip_Config': 'https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/export?format=csv&gid=345678',
-    'IES_Normalisation_Map': 'https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/export?format=csv&gid=456789',
-    'Customer_View_Config': 'https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/export?format=csv&gid=567890'
-}
 
 # === SESSION STATE ===
 if 'authenticated' not in st.session_state:
@@ -33,36 +25,33 @@ with st.sidebar:
             st.success("Access granted")
         elif password_input:
             st.error("Incorrect password")
-    
-    if st.session_state['authenticated']:
-        st.info("Admin Panel")
-        st.markdown("**Google Sheets URLs (Data Sources):**")
-        for name, url in GOOGLE_SHEET_URLS.items():
-            st.markdown(f"[{name}]({url})")
-        if st.button("Reload All Data"):
-            st.session_state['dataset'] = None
-            st.success("Data cleared. Will reload on refresh.")
 
 # === LOAD DATA FUNCTION ===
-def load_google_sheet(url):
+def load_local_excel(file_path):
     try:
-        return pd.read_csv(url)
+        xls = pd.ExcelFile(file_path)
+        dataset = {
+            'LumCAT_Config': pd.read_excel(xls, 'LumCAT_Config'),
+            'ECG_Config': pd.read_excel(xls, 'ECG_Config'),
+            'Tier_Rules_Config': pd.read_excel(xls, 'Tier_Rules_Config'),
+            'LED_Chip_Config': pd.read_excel(xls, 'LED_Chip_Config'),
+            'IES_Normalisation_Map': pd.read_excel(xls, 'IES_Normalisation_Map'),
+            'Customer_View_Config': pd.read_excel(xls, 'Customer_View_Config')
+        }
+        return dataset
     except Exception as e:
-        st.error(f"Error loading data from Google Sheets: {e}")
-        return pd.DataFrame()
+        st.error(f"Error loading local Excel file: {e}")
+        return {}
 
-# === LOAD DATA FROM SHEETS ===
+# === LOAD DATA ===
 @st.cache_data(show_spinner=True)
 def load_all_data():
-    dataset = {}
-    for name, url in GOOGLE_SHEET_URLS.items():
-        df = load_google_sheet(url)
-        dataset[name] = df
-    return dataset
+    file_path = "Linear_Data.xlsx"  # Path to your local file (adjust as needed)
+    return load_local_excel(file_path)
 
 # === LOAD DATA ONCE ===
 if st.session_state['dataset'] is None:
-    with st.spinner("Loading data from Google Sheets..."):
+    with st.spinner("Loading data from local file..."):
         st.session_state['dataset'] = load_all_data()
 
 # === MAIN APP ===
@@ -70,11 +59,12 @@ st.title("Linear LightSpec Optimiser v4.8")
 st.caption("No smoke. No mirrors. Just truth.")
 
 # === CORE DATA DISPLAY ===
-st.subheader("📊 Core Dataset Preview")
+if st.session_state['authenticated']:
+    st.subheader("📊 Core Dataset Preview (Admin Only)")
 
-for name, df in st.session_state['dataset'].items():
-    st.markdown(f"### {name}")
-    st.dataframe(df.head(10))
+    for name, df in st.session_state['dataset'].items():
+        st.markdown(f"### {name}")
+        st.dataframe(df.head(10))
 
 # === CUSTOMER LUMINAIRE BUILDER ===
 st.subheader("🔨 Customer Luminaire Builder")
@@ -90,7 +80,7 @@ with st.form("luminaire_entry_form"):
     length_input = st.number_input("Enter Required Length (mm)", min_value=280, step=10)
     notes_input = st.text_input("Notes (e.g., Room Name, Mounting Type)")
     submitted = st.form_submit_button("Add to Table")
-    
+
     if submitted:
         new_entry = {
             'Luminaire Name': luminaire_name,
@@ -107,7 +97,7 @@ st.markdown("### Current Luminaire Selections")
 if st.session_state['customer_entries']:
     customer_df = pd.DataFrame(st.session_state['customer_entries'])
     st.dataframe(customer_df)
-    
+
     csv = customer_df.to_csv(index=False)
     st.download_button(
         label="Download CSV",
@@ -119,4 +109,4 @@ else:
     st.info("No luminaires added yet.")
 
 # === FOOTER ===
-st.caption(f"Version 4.8 - Powered by Google Sheets - {datetime.now().strftime('%Y-%m-%d')}")
+st.caption(f"Version 4.8 - Powered by Local Dataset - {datetime.now().strftime('%Y-%m-%d')}")
