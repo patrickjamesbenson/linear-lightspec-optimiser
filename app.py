@@ -243,18 +243,18 @@ if st.session_state['ies_files']:
             ]
             st.table(pd.DataFrame(base_values))
 
-        st.markdown("#### 🔎 LumCAT Lookup")
-        lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
-        lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
+            st.markdown("#### 🔎 LumCAT Lookup")
+            lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
+            lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
 
-        lumcat_input = st.text_input("Enter LumCAT Code", value=lumcat_from_meta)
+            lumcat_input = st.text_input("Enter LumCAT Code", value=lumcat_from_meta)
 
-        if lumcat_input:
-            parsed_codes = parse_lumcat(lumcat_input)
-            if parsed_codes:
-                lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
-                if lumcat_desc:
-                    st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
+            if lumcat_input:
+                parsed_codes = parse_lumcat(lumcat_input)
+                if parsed_codes:
+                    lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
+                    if lumcat_desc:
+                        st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
 
 # === CUSTOMER LUMINAIRE BUILDER ===
 st.subheader("🔨 Customer Luminaire Builder")
