@@ -76,9 +76,47 @@ for name, df in st.session_state['dataset'].items():
     st.markdown(f"### {name}")
     st.dataframe(df.head(10))
 
-# === CUSTOMER LUMINAIRE BUILDER PLACEHOLDER ===
-st.subheader("🔨 Customer Luminaire Builder (Coming Next)")
-st.info("Select Tiers, Lengths, and Export Options will be here.")
+# === CUSTOMER LUMINAIRE BUILDER ===
+st.subheader("🔨 Customer Luminaire Builder")
+
+customer_table = []
+
+if 'customer_entries' not in st.session_state:
+    st.session_state['customer_entries'] = []
+
+with st.form("luminaire_entry_form"):
+    luminaire_name = st.text_input("Luminaire Name")
+    tier_selection = st.selectbox("Select Tier", ["Core", "Professional", "Advanced"])
+    length_input = st.number_input("Enter Required Length (mm)", min_value=280, step=10)
+    notes_input = st.text_input("Notes (e.g., Room Name, Mounting Type)")
+    submitted = st.form_submit_button("Add to Table")
+    
+    if submitted:
+        new_entry = {
+            'Luminaire Name': luminaire_name,
+            'Tier': tier_selection,
+            'Selected Length (mm)': length_input,
+            'Notes': notes_input,
+            'Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        st.session_state['customer_entries'].append(new_entry)
+        st.success("Luminaire added to table.")
+
+# === DISPLAY CUSTOMER TABLE ===
+st.markdown("### Current Luminaire Selections")
+if st.session_state['customer_entries']:
+    customer_df = pd.DataFrame(st.session_state['customer_entries'])
+    st.dataframe(customer_df)
+    
+    csv = customer_df.to_csv(index=False)
+    st.download_button(
+        label="Download CSV",
+        data=csv,
+        file_name=f"luminaire_selections_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv"
+    )
+else:
+    st.info("No luminaires added yet.")
 
 # === FOOTER ===
 st.caption(f"Version 4.8 - Powered by Google Sheets - {datetime.now().strftime('%Y-%m-%d')}")
