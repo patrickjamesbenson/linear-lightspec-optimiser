@@ -23,7 +23,7 @@ def load_dataset():
         workbook = pd.ExcelFile(default_excel_path)
         st.session_state['dataset'] = {
             'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
-            'LED_Chip_Config': pd.read_excel(workbook, 'LED_Chip_Config'),
+            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
             'ECG_Config': pd.read_excel(workbook, 'ECG_Config'),
             'Tier_Rules_Config': pd.read_excel(workbook, 'Tier_Rules_Config')
         }
@@ -41,7 +41,7 @@ with st.sidebar:
         workbook = pd.ExcelFile(uploaded_excel)
         st.session_state['dataset'] = {
             'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
-            'LED_Chip_Config': pd.read_excel(workbook, 'LED_Chip_Config'),
+            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
             'ECG_Config': pd.read_excel(workbook, 'ECG_Config'),
             'Tier_Rules_Config': pd.read_excel(workbook, 'Tier_Rules_Config')
         }
@@ -108,7 +108,7 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 # === TIER LOOKUP FUNCTION ===
 def get_tier_values():
     tier_rules = st.session_state['dataset']['Tier_Rules_Config']
-    led_chip_config = st.session_state['dataset']['LED_Chip_Config']
+    led_chip_config = st.session_state['dataset']['LED_and_Board_Config']
 
     tier_row_rules = tier_rules[tier_rules['Default'].astype(str).str.lower() == 'yes']
     led_chip_row = led_chip_config[led_chip_config['Default'].astype(str).str.lower() == 'yes']
