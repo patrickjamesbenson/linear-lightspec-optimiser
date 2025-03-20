@@ -1,12 +1,13 @@
-# Linear LightSpec Optimiser v4.8 - Full Testable Streamlit App
+# Linear LightSpec Optimiser v4.8 - Full Streamlit App with IES File Parsing and Customer Builder
 # No smoke. No mirrors. Just truth.
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 from datetime import datetime
 
 # === CONFIG ===
-ADMIN_PASSWORD = "230170"  # Replace with your secure password
+ADMIN_PASSWORD = "your_secure_password"  # Replace with your secure password
 
 # === SESSION STATE ===
 if 'authenticated' not in st.session_state:
@@ -14,6 +15,9 @@ if 'authenticated' not in st.session_state:
 
 if 'dataset' not in st.session_state:
     st.session_state['dataset'] = None
+
+if 'ies_files' not in st.session_state:
+    st.session_state['ies_files'] = []
 
 # === ADMIN LOGIN PANEL ===
 with st.sidebar:
@@ -43,33 +47,122 @@ def load_local_excel(file_path):
         st.error(f"Error loading local Excel file: {e}")
         return {}
 
-# === LOAD DATA ===
 @st.cache_data(show_spinner=True)
 def load_all_data():
     file_path = "Linear_Data.xlsx"  # Path to your local file (adjust as needed)
     return load_local_excel(file_path)
 
-# === LOAD DATA ONCE ===
 if st.session_state['dataset'] is None:
     with st.spinner("Loading data from local file..."):
         st.session_state['dataset'] = load_all_data()
+
+# === IES FILE UPLOAD ===
+uploaded_file = st.file_uploader("📄 Upload IES file", type=["ies"])
+if uploaded_file:
+    file_content = uploaded_file.read().decode('utf-8')
+    st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
+
+# === IES PARSE FUNCTION ===
+def parse_ies_file(file_content):
+    lines = file_content.splitlines()
+    header_lines, data_lines = [], []
+    reading_data = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("TILT"):
+            reading_data = True
+        elif not reading_data:
+            header_lines.append(stripped)
+        else:
+            data_lines.append(stripped)
+
+    photometric_raw = " ".join(data_lines[:2]).split()
+    photometric_params = [float(x) if '.' in x or 'e' in x.lower() else int(x) for x in photometric_raw]
+    n_vert = int(photometric_params[3])
+    n_horz = int(photometric_params[4])
+
+    remaining_data = " ".join(data_lines[2:]).split()
+    vertical_angles = [float(x) for x in remaining_data[:n_vert]]
+    horizontal_angles = [float(x) for x in remaining_data[n_vert:n_vert + n_horz]]
+
+    candela_values = remaining_data[n_vert + n_horz:]
+    candela_matrix = []
+    idx = 0
+    for _ in range(n_horz):
+        row = [float(candela_values[idx + i]) for i in range(n_vert)]
+        candela_matrix.append(row)
+        idx += n_vert
+
+    return header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix
+
+# === SIMPLE LUMEN CALCULATION ===
+def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix, symmetry_factor=4):
+    vert_rad = np.radians(vertical_angles)
+    delta_vert = np.diff(vert_rad)
+    delta_vert = np.append(delta_vert, delta_vert[-1])
+
+    symmetry_range_rad = np.radians(horizontal_angles[-1] - horizontal_angles[0])
+    num_horz_segments = len(horizontal_angles)
+    uniform_delta_horz = symmetry_range_rad / num_horz_segments
+
+    total_flux = 0.0
+    for h_idx in range(num_horz_segments):
+        candela_row = candela_matrix[h_idx]
+        for v_idx, cd in enumerate(candela_row):
+            theta = vert_rad[v_idx]
+            d_theta = delta_vert[v_idx]
+            flux = cd * np.sin(theta) * d_theta * uniform_delta_horz
+            total_flux += flux
+
+    return round(total_flux * symmetry_factor, 1)
 
 # === MAIN APP ===
 st.title("Linear LightSpec Optimiser v4.8")
 st.caption("No smoke. No mirrors. Just truth.")
 
-# === CORE DATA DISPLAY ===
 if st.session_state['authenticated']:
     st.subheader("📊 Core Dataset Preview (Admin Only)")
-
     for name, df in st.session_state['dataset'].items():
         st.markdown(f"### {name}")
         st.dataframe(df.head(10))
 
+# === IES FILE DISPLAY ===
+if st.session_state['ies_files']:
+    ies_file = st.session_state['ies_files'][0]
+    header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix = parse_ies_file(ies_file['content'])
+
+    calculated_lumens = corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix)
+    input_watts = photometric_params[12]
+    length_m = photometric_params[8]
+
+    base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
+    base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
+
+    with st.expander("📏 IES Parameters + Metadata + Derived Values", expanded=True):
+        meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
+
+        st.markdown("#### IES Metadata")
+        st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
+
+        st.markdown("#### IES Parameters")
+        photometric_table = [
+            {"Description": "Lamps", "Value": f"{photometric_params[0]}"},
+            {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}"},
+            {"Description": "Input Watts", "Value": f"{input_watts}"},
+            {"Description": "Length (m)", "Value": f"{length_m}"},
+        ]
+        st.table(pd.DataFrame(photometric_table))
+
+        st.markdown("#### Derived Values")
+        base_values = [
+            {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}"},
+            {"Description": "Efficacy (lm/W)", "Value": f"{base_lm_per_watt:.1f}"},
+            {"Description": "Lumens per Meter", "Value": f"{base_lm_per_m:.1f}"},
+        ]
+        st.table(pd.DataFrame(base_values))
+
 # === CUSTOMER LUMINAIRE BUILDER ===
 st.subheader("🔨 Customer Luminaire Builder")
-
-customer_table = []
 
 if 'customer_entries' not in st.session_state:
     st.session_state['customer_entries'] = []
@@ -92,7 +185,6 @@ with st.form("luminaire_entry_form"):
         st.session_state['customer_entries'].append(new_entry)
         st.success("Luminaire added to table.")
 
-# === DISPLAY CUSTOMER TABLE ===
 st.markdown("### Current Luminaire Selections")
 if st.session_state['customer_entries']:
     customer_df = pd.DataFrame(st.session_state['customer_entries'])
