@@ -22,8 +22,8 @@ if os.path.exists(default_excel_path):
     workbook = pd.ExcelFile(default_excel_path)
     st.session_state['dataset'] = {
         'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
-        'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
-        'ECG_Config': pd.read_excel(workbook, 'ECG_Config')
+        'LED_and_Board_Config': pd.read_excel(workbook, 'LED_Board'),  # Sheet renamed
+        'ECG_Config': pd.read_excel(workbook, 'ECG_Tables')            # Sheet renamed
     }
 else:
     st.warning("⚠️ Default dataset not found! Please upload manually.")
@@ -37,8 +37,8 @@ with st.sidebar:
         workbook = pd.ExcelFile(uploaded_excel)
         st.session_state['dataset'] = {
             'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
-            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
-            'ECG_Config': pd.read_excel(workbook, 'ECG_Config')
+            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_Board'),  # Sheet renamed
+            'ECG_Config': pd.read_excel(workbook, 'ECG_Tables')            # Sheet renamed
         }
 
 # === FILE UPLOAD: IES FILE ===
