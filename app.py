@@ -120,10 +120,10 @@ def get_tier_values():
     return {
         'Default Tier': tier_row_rules['Tier'],
         'Chip Name': led_chip_row['Chip_Name'],
-        'Max LED Load (mA)': led_chip_row['Max_LED_Load_(mA)'],
-        'Internal Code / TM30': led_chip_row['Internal_Code_TM30'],
-        'Board Segment LED Pitch': tier_row_rules['Series_LED_Pitch_(mm)'],
-        'LED Strip Voltage': led_chip_row['LED_Strip_Voltage_(SELV)']
+        'Max LED Load (mA)': led_chip_row['Max_LED_Load(mA)'],
+        'Internal Code / TM30': led_chip_row['TM30-report ref.'],
+        'Board Segment LED Pitch': tier_row_rules['Series LED Pitch (mm)'],
+        'LED Strip Voltage': led_chip_row['Vf (Volts)']
     }
 
 # === MAIN DISPLAY ===
