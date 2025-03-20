@@ -17,17 +17,20 @@ if 'customer_entries' not in st.session_state:
     st.session_state['customer_entries'] = []
 
 # === DEFAULT DATASET LOAD ===
-default_excel_path = 'Linear_Data.xlsx'
-if os.path.exists(default_excel_path):
-    workbook = pd.ExcelFile(default_excel_path)
-    st.session_state['dataset'] = {
-        'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
-        'LED_and_Board_Config': pd.read_excel(workbook, 'LED_Chip_Config'),
-        'ECG_Config': pd.read_excel(workbook, 'ECG_Config'),
-        'Tier_Rules_Config': pd.read_excel(workbook, 'Tier_Rules_Config')
-    }
-else:
-    st.warning("⚠️ Default dataset not found! Please upload manually.")
+def load_dataset():
+    default_excel_path = 'Linear_Data.xlsx'
+    if os.path.exists(default_excel_path):
+        workbook = pd.ExcelFile(default_excel_path)
+        st.session_state['dataset'] = {
+            'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
+            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
+            'ECG_Config': pd.read_excel(workbook, 'ECG_Config'),
+            'Tier_Rules_Config': pd.read_excel(workbook, 'Tier_Rules_Config')
+        }
+    else:
+        st.warning("⚠️ Default dataset not found! Please upload manually.")
+
+load_dataset()
 
 # === SIDEBAR ===
 with st.sidebar:
@@ -38,7 +41,7 @@ with st.sidebar:
         workbook = pd.ExcelFile(uploaded_excel)
         st.session_state['dataset'] = {
             'LumCAT_Config': pd.read_excel(workbook, 'LumCAT_Config'),
-            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_Chip_Config'),
+            'LED_and_Board_Config': pd.read_excel(workbook, 'LED_and_Board_Config'),
             'ECG_Config': pd.read_excel(workbook, 'ECG_Config'),
             'Tier_Rules_Config': pd.read_excel(workbook, 'Tier_Rules_Config')
         }
@@ -111,7 +114,7 @@ def get_tier_values():
     led_chip_row = led_chip_config[led_chip_config['Default'].astype(str).str.lower() == 'yes']
 
     if tier_row_rules.empty or led_chip_row.empty:
-        st.error("Default row not found in Tier_Rules_Config or LED_Chip_Config")
+        st.error("Default row not found in Tier_Rules_Config or LED_and_Board_Config")
         return {}
 
     tier_row_rules = tier_row_rules.iloc[0]
