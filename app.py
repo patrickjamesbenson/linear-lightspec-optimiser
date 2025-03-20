@@ -121,7 +121,7 @@ def get_tier_values(tier_name):
 
     return {
         'Default Tier': tier_row_rules['Tier'],
-        'Chip Name': led_chip_row['Chip Name'],
+        'Chip Name': led_chip_row['Chip_Name'],
         'Max LED Load (mA)': led_chip_row['Max LED Load (mA)'],
         'Internal Code / TM30': led_chip_row['Internal Code / TM30'],
         'Board Segment LED Pitch': tier_row_rules['Series LED Pitch (mm)'],
