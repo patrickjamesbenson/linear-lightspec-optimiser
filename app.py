@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime
 
 # === CONFIG ===
-ADMIN_PASSWORD = "your_secure_password"  # Replace with your secure password
+ADMIN_PASSWORD = "230170"  # Replace with your secure password
 
 # === SESSION STATE ===
 if 'authenticated' not in st.session_state:
