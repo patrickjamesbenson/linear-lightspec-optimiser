@@ -13,8 +13,6 @@ if 'ies_files' not in st.session_state:
     st.session_state['ies_files'] = []
 if 'dataset' not in st.session_state:
     st.session_state['dataset'] = {}
-if 'customer_entries' not in st.session_state:
-    st.session_state['customer_entries'] = []
 
 # === DEFAULT DATASET LOAD ===
 default_excel_path = 'Linear_Data.xlsx'
@@ -103,17 +101,12 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
     return round(total_flux * symmetry_factor, 1)
 
 # === TIER LOOKUP FUNCTION ===
-def get_tier_values(tier_name):
+def get_tier_values():
     tier_rules = st.session_state['dataset']['Tier_Rules_Config']
     led_chip_config = st.session_state['dataset']['LED_and_Board_Config']
 
-    # Filter rows with Default == 'Yes'
     tier_row_rules = tier_rules[tier_rules['Default'].astype(str).str.lower() == 'yes']
     led_chip_row = led_chip_config[led_chip_config['Default'].astype(str).str.lower() == 'yes']
-
-    # Debug info
-    st.write("Tier Rules Defaults:", tier_row_rules)
-    st.write("LED Chip Defaults:", led_chip_row)
 
     if tier_row_rules.empty or led_chip_row.empty:
         st.error("Default row not found in Tier_Rules_Config or LED_Chip_Config")
@@ -122,7 +115,6 @@ def get_tier_values(tier_name):
     tier_row_rules = tier_row_rules.iloc[0]
     led_chip_row = led_chip_row.iloc[0]
 
-    # Return mapped values
     return {
         'Default Tier': tier_row_rules['Tier'],
         'Chip Name': led_chip_row['Chip_Name'],
@@ -146,7 +138,7 @@ if st.session_state['ies_files']:
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    tier_values = get_tier_values("Core")
+    tier_values = get_tier_values()
 
     if tier_values:
         actual_led_current_ma = round(
@@ -191,4 +183,4 @@ if st.session_state['ies_files']:
             st.table(pd.DataFrame(base_values))
 
 # === FOOTER ===
-st.caption("Version 4.8 - Unified Base Info + LumCAT Lookup + Customer Builder")
+st.caption("Version 4.8 - Unified Base Info + LumCAT Lookup")
