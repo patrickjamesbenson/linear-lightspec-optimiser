@@ -2,53 +2,57 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
+import gspread
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Evolt Linear Optimiser", layout="wide")
 st.title("Evolt Linear Optimiser v5 - Google Sheets Edition")
 
-# === GOOGLE SHEETS CONNECTION ===
-@st.cache_resource(show_spinner=False)
-def load_google_sheet(sheet_url):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
-    client = gspread.authorize(creds)
-    spreadsheet = client.open_by_url(sheet_url)
-    return spreadsheet
-
-sheet_url = "https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/edit"
-
-try:
-    spreadsheet = load_google_sheet(sheet_url)
-    st.success("\u2705 Successfully loaded Google Sheets data")
-    lumcat_sheet = spreadsheet.worksheet("LumCAT_Config")
-    build_data_sheet = spreadsheet.worksheet("Build_Data")
-
-    lumcat_df = pd.DataFrame(lumcat_sheet.get_all_records())
-    build_data_df = pd.DataFrame(build_data_sheet.get_all_records())
-
-    st.session_state['dataset'] = {
-        'LumCAT_Config': lumcat_df,
-        'Build_Data': build_data_df
-    }
-except Exception as e:
-    st.error(f"\u274C Failed to load dataset: {e}")
-
 # === SESSION STATE INITIALIZATION ===
 if 'ies_files' not in st.session_state:
     st.session_state['ies_files'] = []
+if 'dataset' not in st.session_state:
+    st.session_state['dataset'] = {}
 if 'customer_entries' not in st.session_state:
     st.session_state['customer_entries'] = []
 
+# === GOOGLE SHEETS CONFIG ===
+GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/edit#gid=0'
+
+# === LOAD DATASET FROM GOOGLE SHEETS ===
+def load_google_sheet_data():
+    try:
+        gc = gspread.oauth()
+        sh = gc.open_by_url(GOOGLE_SHEET_URL)
+
+        st.session_state['dataset'] = {
+            'LumCAT_Config': pd.DataFrame(sh.worksheet('LumCAT_Config').get_all_records()),
+            'Build_Data': pd.DataFrame(sh.worksheet('Build_Data').get_all_records()),
+            'Customer_View_Config': pd.DataFrame(sh.worksheet('Customer_View_Config').get_all_records())
+        }
+        st.success("✅ Successfully loaded Google Sheets data")
+    except Exception as e:
+        st.error(f"❌ Failed to load dataset: {e}")
+
+load_google_sheet_data()
+
+# === HELPER FUNCTION: TOOLTIP LOOKUP ===
+def get_tooltip(field):
+    tooltips_df = st.session_state['dataset'].get('Customer_View_Config')
+    if tooltips_df is not None:
+        match = tooltips_df[tooltips_df['Field'].str.strip() == field.strip()]
+        if not match.empty:
+            return match['Tooltip'].values[0]
+    return ""
+
 # === FILE UPLOAD: IES FILE ===
-uploaded_file = st.file_uploader("\ud83d\udcc4 Upload IES file", type=["ies"])
+uploaded_file = st.file_uploader("📄 Upload IES file", type=["ies"])
 if uploaded_file:
     file_content = uploaded_file.read().decode('utf-8')
     st.session_state['ies_files'] = [{'name': uploaded_file.name, 'content': file_content}]
 
-# === PARSE FUNCTIONS ===
+# === PARSE IES FILE ===
 def parse_ies_file(file_content):
     lines = file_content.splitlines()
     header_lines, data_lines = [], []
@@ -81,6 +85,7 @@ def parse_ies_file(file_content):
 
     return header_lines, photometric_params, vertical_angles, horizontal_angles, candela_matrix
 
+# === LUMEN CALCULATION ===
 def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, candela_matrix, symmetry_factor=4):
     vert_rad = np.radians(vertical_angles)
     delta_vert = np.diff(vert_rad)
@@ -115,50 +120,40 @@ if st.session_state['ies_files']:
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
-    meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
+    with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
+        meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
 
-    st.markdown("#### IES Metadata")
-    st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
+        st.markdown("#### IES Metadata")
+        st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
-    st.markdown("#### IES Parameters")
-    photometric_table = [
-        {"Description": "Lamps", "Value": photometric_params[0]},
-        {"Description": "Lumens/Lamp", "Value": photometric_params[1]},
-        {"Description": "Candela Mult.", "Value": photometric_params[2]},
-        {"Description": "Vert Angles", "Value": photometric_params[3]},
-        {"Description": "Horiz Angles", "Value": photometric_params[4]},
-        {"Description": "Photometric Type", "Value": photometric_params[5]},
-        {"Description": "Units Type", "Value": photometric_params[6]},
-        {"Description": "Width (m)", "Value": photometric_params[7]},
-        {"Description": "Length (m)", "Value": photometric_params[8]},
-        {"Description": "Height (m)", "Value": photometric_params[9]},
-        {"Description": "Ballast Factor", "Value": photometric_params[10]},
-        {"Description": "Future Use", "Value": photometric_params[11]},
-        {"Description": "Input Watts [F]", "Value": photometric_params[12]}
-    ]
-    st.table(pd.DataFrame(photometric_table))
+        st.markdown("#### IES Parameters")
+        photometric_table = [
+            {"Description": "Lamps", "Value": f"{photometric_params[0]}", "Tooltip": get_tooltip("Lamps")},
+            {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}", "Tooltip": get_tooltip("Lumens/Lamp")},
+            {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}", "Tooltip": get_tooltip("Input Watts [F]")},
+        ]
+        st.table(pd.DataFrame(photometric_table))
 
-    st.markdown("#### IES Derived Values")
-    base_values = [
-        {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}"},
-        {"Description": "Efficacy (lm/W)", "Value": f"{base_lm_per_watt:.1f}"},
-        {"Description": "Lumens per Meter", "Value": f"{base_lm_per_m:.1f}"},
-    ]
-    st.table(pd.DataFrame(base_values))
+        st.markdown("#### IES Derived Values")
+        base_values = [
+            {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}", "Tooltip": get_tooltip("Total Lumens")},
+            {"Description": "Efficacy (lm/W)", "Value": f"{base_lm_per_watt:.1f}", "Tooltip": get_tooltip("Efficacy (lm/W)")},
+            {"Description": "Lumens per Meter", "Value": f"{base_lm_per_m:.1f}", "Tooltip": get_tooltip("Lumens per Meter")}
+        ]
+        st.table(pd.DataFrame(base_values))
 
-    # === LumCAT Lookup ===
-    st.markdown("#### \ud83d\udd0e LumCAT Lookup")
-    lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
-    lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
+        st.markdown("#### 🔎 LumCAT Lookup")
+        lumcat_matrix_df = st.session_state['dataset']['LumCAT_Config']
+        lumcat_from_meta = meta_dict.get("[LUMCAT]", "")
 
-    lumcat_input = st.text_input("Enter LumCAT Code", value=lumcat_from_meta)
+        lumcat_input = st.text_input("Enter LumCAT Code", value=lumcat_from_meta)
 
-    if lumcat_input:
-        parsed_codes = parse_lumcat(lumcat_input)
-        if parsed_codes:
-            lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
-            if lumcat_desc:
-                st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
+        if lumcat_input:
+            parsed_codes = parse_lumcat(lumcat_input)
+            if parsed_codes:
+                lumcat_desc = lookup_lumcat_descriptions(parsed_codes, lumcat_matrix_df)
+                if lumcat_desc:
+                    st.table(pd.DataFrame(lumcat_desc.items(), columns=["Field", "Value"]))
 
 # === FOOTER ===
-st.caption("Version 5 - Google Sheets Connected - LumCAT Lookup - Customer Builder")
+st.caption("Version 5 - Google Sheets Connected - Tooltips Added")
