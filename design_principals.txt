@@ -1,0 +1,49 @@
+🔧 Key Design Principles (Reaffirmed)
+✅ Transparency
+Show every raw input and derived value clearly.
+Engineers can audit the calculations step by step.
+✅ Explain the ‘Why’ Behind the Numbers
+Clearly identify what changed when a tier, length, or chip option is selected.
+Don’t hide normalisation or fudge calculations—if they see 40% load, it’s real, and they can trace it.
+✅ Give Full Control
+They lock in choices after seeing data—no automated “optimisation” they can’t verify.
+Provide live previews and full data outputs they can test in their workflows (AGI32, DIALux, etc.).
+✅ Engineer-to-Engineer Respect
+Assume they know what they’re doing—provide tools, not walls.
+Let them override when they need, but show sane defaults.
+✅ How This Is Reflected In What We’ve Built
+1. IES Parsing and Reverse Lookup
+Shows every photometric param, calculated lumens, lm/W, length, etc.
+LumCAT breakdown shows exactly how the code was parsed.
+Clean, structured tables—no clutter.
+2. Tier Selection
+Engineers see:
+Parallel counts
+Board lengths
+Chip densities / efficiencies
+mA per LED / per mm
+Know why Pro has more headroom, why Advanced has finer increments.
+3. Scaling Logic
+Engineers select lengths → see buildable vs. non-buildable options.
+Can see exactly how power density changes per length, pitch, and load %.
+✅ What We Can Emphasise In The UI
+Element	Purpose
+Base Data Panel	Parsed IES, Derived Values, LumCAT lookup—raw facts.
+Tier Impact Table	Side-by-side Core / Pro / Advanced: show how each changes load, performance, cost, life.
+Selection Summary Table	Each length selection, why it works, what the result is.
+Build Table	Luminaire schedule ready for BOM, all values traceable.
+Export / Import	Engineers can resume work, not redo it.
+✅ Final Message / Branding Consistency
+“No smoke. No mirrors.
+Just clear facts and performance numbers you can trust.”
+
+✅ Next Logical Step
+a. Move to Mock UI Implementation (facts-driven tier comparison + length scaling).
+b. Build the Rule Engine for scaling → show exactly why lengths and loads change.
+c. Plan for User Upload / Resume Previous Workflows, allowing iterative, fact-based adjustments.
+
+
+
+
+✅ Absolutely aligned with that philosophy.
+You’re building a tool for engineers, not marketers—a system that lays bare the facts, shows transparent scaling, and empowers data-driven decisions. No smoke. No mirrors. Just clarity.
