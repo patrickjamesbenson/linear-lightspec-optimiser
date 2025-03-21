@@ -107,6 +107,58 @@ def corrected_simple_lumen_calculation(vertical_angles, horizontal_angles, cande
 
     return round(total_flux * symmetry_factor, 1)
 
+# === LUMCAT PARSE FUNCTION ===
+def parse_lumcat(lumcat_code):
+    try:
+        range_code, rest = lumcat_code.split('-')
+        parsed = {
+            "Range": range_code,
+            "Option Code": rest[0:2],
+            "Diffuser Code": rest[2:4],
+            "Wiring Code": rest[4],
+            "Driver Code": rest[5:7],
+            "Lumens Code": rest[7:10],
+            "CRI Code": rest[10:12],
+            "CCT Code": rest[12:14]
+        }
+        parsed['Lumens Derived Display'] = round(float(parsed["Lumens Code"]) * 10, 1)
+        return parsed
+    except Exception as e:
+        st.error(f"Error parsing LUMCAT: {e}")
+        return None
+
+# === LUMCAT LOOKUP FUNCTION ===
+def lookup_lumcat_descriptions(parsed_codes, matrix_df):
+    if matrix_df.empty or parsed_codes is None:
+        return None
+
+    matrix_df.columns = matrix_df.columns.str.strip()
+    matrix_df['CRI Code'] = matrix_df['CRI Code'].astype(str).str.strip()
+    matrix_df['CCT/Colour Code'] = matrix_df['CCT/Colour Code'].astype(str).str.strip()
+
+    parsed_codes['CRI Code'] = str(parsed_codes['CRI Code']).strip()
+    parsed_codes['CCT Code'] = str(parsed_codes['CCT Code']).strip()
+
+    result = {}
+    result['Range'] = parsed_codes['Range']
+
+    option_match = matrix_df.loc[matrix_df['Option Code'] == parsed_codes['Option Code']]
+    diffuser_match = matrix_df.loc[matrix_df['Diffuser / Louvre Code'] == parsed_codes['Diffuser Code']]
+    wiring_match = matrix_df.loc[matrix_df['Wiring Code'] == parsed_codes['Wiring Code']]
+    driver_match = matrix_df.loc[matrix_df['Driver Code'] == parsed_codes['Driver Code']]
+    cri_match = matrix_df.loc[matrix_df['CRI Code'] == parsed_codes['CRI Code']]
+    cct_match = matrix_df.loc[matrix_df['CCT/Colour Code'] == parsed_codes['CCT Code']]
+
+    result['Option Description'] = option_match['Option Description'].values[0] if not option_match.empty else "⚠️ Not Found"
+    result['Diffuser Description'] = diffuser_match['Diffuser / Louvre Description'].values[0] if not diffuser_match.empty else "⚠️ Not Found"
+    result['Wiring Description'] = wiring_match['Wiring Description'].values[0] if not wiring_match.empty else "⚠️ Not Found"
+    result['Driver Description'] = driver_match['Driver Description'].values[0] if not driver_match.empty else "⚠️ Not Found"
+    result['Lumens (Display Only)'] = f"{parsed_codes['Lumens Derived Display']} lm"
+    result['CRI Description'] = cri_match['CRI Description'].values[0] if not cri_match.empty else "⚠️ Not Found"
+    result['CCT Description'] = cct_match['CCT/Colour Description'].values[0] if not cct_match.empty else "⚠️ Not Found"
+
+    return result
+
 # === MAIN DISPLAY ===
 if st.session_state['ies_files']:
     ies_file = st.session_state['ies_files'][0]
@@ -121,6 +173,10 @@ if st.session_state['ies_files']:
     base_lm_per_watt = round(calculated_lumens / input_watts, 1) if input_watts > 0 else 0
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
+    build_data = st.session_state['dataset']['Build_Data']
+    default_tier_row = build_data.iloc[:, 1]  # Example extraction from Build_Data
+    default_chip_name = build_data.columns[1]  # Example extraction from header
+
     with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
 
@@ -131,17 +187,7 @@ if st.session_state['ies_files']:
         photometric_table = [
             {"Description": "Lamps", "Value": f"{photometric_params[0]}", "Tooltip": get_tooltip("Lamps")},
             {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}", "Tooltip": get_tooltip("Lumens/Lamp")},
-            {"Description": "Candela Mult.", "Value": f"{photometric_params[2]}", "Tooltip": get_tooltip("Candela Mult.")},
-            {"Description": "Vert Angles", "Value": f"{photometric_params[3]}", "Tooltip": get_tooltip("Vert Angles")},
-            {"Description": "Horiz Angles", "Value": f"{photometric_params[4]}", "Tooltip": get_tooltip("Horiz Angles")},
-            {"Description": "Photometric Type", "Value": f"{photometric_params[5]}", "Tooltip": get_tooltip("Photometric Type")},
-            {"Description": "Units Type", "Value": f"{photometric_params[6]}", "Tooltip": get_tooltip("Units Type")},
-            {"Description": "Width (m)", "Value": f"{photometric_params[7]}", "Tooltip": get_tooltip("Width (m)")},
-            {"Description": "Length (m)", "Value": f"{photometric_params[8]}", "Tooltip": get_tooltip("Length (m)")},
-            {"Description": "Height (m)", "Value": f"{photometric_params[9]}", "Tooltip": get_tooltip("Height (m)")},
-            {"Description": "Ballast Factor", "Value": f"{photometric_params[10]}", "Tooltip": get_tooltip("Ballast Factor")},
-            {"Description": "Future Use", "Value": f"{photometric_params[11]}", "Tooltip": get_tooltip("Future Use")},
-            {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}", "Tooltip": get_tooltip("Input Watts [F]")}
+            {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}", "Tooltip": get_tooltip("Input Watts [F]")},
         ]
         st.table(pd.DataFrame(photometric_table))
 
@@ -149,7 +195,12 @@ if st.session_state['ies_files']:
         base_values = [
             {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}", "Tooltip": get_tooltip("Total Lumens")},
             {"Description": "Efficacy (lm/W)", "Value": f"{base_lm_per_watt:.1f}", "Tooltip": get_tooltip("Efficacy (lm/W)")},
-            {"Description": "Lumens per Meter", "Value": f"{base_lm_per_m:.1f}", "Tooltip": get_tooltip("Lumens per Meter")}
+            {"Description": "Lumens per Meter", "Value": f"{base_lm_per_m:.1f}", "Tooltip": get_tooltip("Lumens per Meter")},
+            {"Description": "Default Tier / Chip", "Value": f"Core / {default_chip_name}", "Tooltip": get_tooltip("Default Tier / Chip")},
+            {"Description": "Max LED Load (mA)", "Value": f"{default_tier_row['LED_Load_(mA)']:.1f}", "Tooltip": get_tooltip("Max LED Load (mA)")},
+            {"Description": "LED Pitch (mm)", "Value": f"{default_tier_row['LED_Group_Pitch_(mm)']:.1f}", "Tooltip": get_tooltip("LED Pitch (mm)")},
+            {"Description": "Actual LED Current (mA)", "Value": f"{(input_watts / 3) * 1000:.1f}", "Tooltip": get_tooltip("Actual LED Current (mA)")},
+            {"Description": "TM30 Code", "Value": f"{default_tier_row['TM30-report_No.']}", "Tooltip": get_tooltip("TM30 Code")}
         ]
         st.table(pd.DataFrame(base_values))
 
