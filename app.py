@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import os
 from datetime import datetime
-import gspread
 
 # === PAGE CONFIG ===
 st.set_page_config(page_title="Evolt Linear Optimiser", layout="wide")
@@ -18,18 +17,19 @@ if 'customer_entries' not in st.session_state:
     st.session_state['customer_entries'] = []
 
 # === GOOGLE SHEETS CONFIG ===
-GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/edit#gid=0'
+GOOGLE_SHEET_ID = '19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs'
 
 # === LOAD DATASET FROM GOOGLE SHEETS ===
 def load_google_sheet_data():
     try:
-        gc = gspread.oauth()
-        sh = gc.open_by_url(GOOGLE_SHEET_URL)
+        lumcat_url = f'https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=LumCAT_Config'
+        build_data_url = f'https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Build_Data'
+        view_config_url = f'https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Customer_View_Config'
 
         st.session_state['dataset'] = {
-            'LumCAT_Config': pd.DataFrame(sh.worksheet('LumCAT_Config').get_all_records()),
-            'Build_Data': pd.DataFrame(sh.worksheet('Build_Data').get_all_records()),
-            'Customer_View_Config': pd.DataFrame(sh.worksheet('Customer_View_Config').get_all_records())
+            'LumCAT_Config': pd.read_csv(lumcat_url),
+            'Build_Data': pd.read_csv(build_data_url),
+            'Customer_View_Config': pd.read_csv(view_config_url)
         }
         st.success("✅ Successfully loaded Google Sheets data")
     except Exception as e:
@@ -130,7 +130,17 @@ if st.session_state['ies_files']:
         photometric_table = [
             {"Description": "Lamps", "Value": f"{photometric_params[0]}", "Tooltip": get_tooltip("Lamps")},
             {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}", "Tooltip": get_tooltip("Lumens/Lamp")},
-            {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}", "Tooltip": get_tooltip("Input Watts [F]")},
+            {"Description": "Candela Mult.", "Value": f"{photometric_params[2]}", "Tooltip": get_tooltip("Candela Mult.")},
+            {"Description": "Vert Angles", "Value": f"{photometric_params[3]}", "Tooltip": get_tooltip("Vert Angles")},
+            {"Description": "Horiz Angles", "Value": f"{photometric_params[4]}", "Tooltip": get_tooltip("Horiz Angles")},
+            {"Description": "Photometric Type", "Value": f"{photometric_params[5]}", "Tooltip": get_tooltip("Photometric Type")},
+            {"Description": "Units Type", "Value": f"{photometric_params[6]}", "Tooltip": get_tooltip("Units Type")},
+            {"Description": "Width (m)", "Value": f"{photometric_params[7]}", "Tooltip": get_tooltip("Width (m)")},
+            {"Description": "Length (m)", "Value": f"{photometric_params[8]}", "Tooltip": get_tooltip("Length (m)")},
+            {"Description": "Height (m)", "Value": f"{photometric_params[9]}", "Tooltip": get_tooltip("Height (m)")},
+            {"Description": "Ballast Factor", "Value": f"{photometric_params[10]}", "Tooltip": get_tooltip("Ballast Factor")},
+            {"Description": "Future Use", "Value": f"{photometric_params[11]}", "Tooltip": get_tooltip("Future Use")},
+            {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}", "Tooltip": get_tooltip("Input Watts [F]")}
         ]
         st.table(pd.DataFrame(photometric_table))
 
