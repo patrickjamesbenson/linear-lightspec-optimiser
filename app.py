@@ -41,9 +41,10 @@ load_google_sheet_data()
 def get_tooltip(field):
     tooltips_df = st.session_state['dataset'].get('Customer_View_Config')
     if tooltips_df is not None:
-        match = tooltips_df[tooltips_df['Field'].str.strip() == field.strip()]
-        if not match.empty:
-            return match['Tooltip'].values[0]
+        if 'Field' in tooltips_df.columns and 'Tooltip' in tooltips_df.columns:
+            match = tooltips_df[tooltips_df['Field'].str.strip() == field.strip()]
+            if not match.empty:
+                return match['Tooltip'].values[0]
     return ""
 
 # === FILE UPLOAD: IES FILE ===
