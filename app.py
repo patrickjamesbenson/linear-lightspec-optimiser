@@ -19,7 +19,7 @@ if 'customer_entries' not in st.session_state:
 # === GOOGLE SHEET CONFIGURATION ===
 GOOGLE_SHEET_CSV_URLS = {
     'LumCAT_Config': 'https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/export?format=csv&gid=0',
-    'Build_Data': 'https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/export?format=csv&gid=123456' # replace gid with actual
+    'Build_Data': 'https://docs.google.com/spreadsheets/d/19r5hWEnQtBIGphGhpQhsXgPVWT2TJ1jWYjbDphNzFMs/edit?usp=sharing' # replace gid with actual
 }
 
 # === DEFAULT DATASET LOAD ===
