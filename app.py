@@ -179,7 +179,7 @@ if st.session_state['ies_files']:
     else:
         st.error("The 'Description' column is missing in Build_Data")
 
-    default_tier = 'V1'  # You can adjust based on user selection later
+    default_tier = 'V1'
 
     with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
@@ -189,7 +189,7 @@ if st.session_state['ies_files']:
 
         st.markdown("#### IES Parameters")
         photometric_table = [
-                        {"Description": "Lamps", "Value": f"{photometric_params[0]}", "Tooltip": get_tooltip("Lamps")},
+            {"Description": "Lamps", "Value": f"{photometric_params[0]}", "Tooltip": get_tooltip("Lamps")},
             {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}", "Tooltip": get_tooltip("Lumens/Lamp")},
             {"Description": "Candela Mult.", "Value": f"{photometric_params[2]}", "Tooltip": get_tooltip("Candela Mult.")},
             {"Description": "Vert Angles", "Value": f"{photometric_params[3]}", "Tooltip": get_tooltip("Vert Angles")},
