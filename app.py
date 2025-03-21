@@ -174,7 +174,11 @@ if st.session_state['ies_files']:
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
     build_data = st.session_state['dataset']['Build_Data']
-    build_data = build_data.set_index('Description')
+    if 'Description' in build_data.columns:
+        build_data = build_data.set_index('Description')
+    else:
+        st.error("The 'Description' column is missing in Build_Data")
+
     default_tier = 'V1'  # You can adjust based on user selection later
 
     with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
@@ -194,7 +198,7 @@ if st.session_state['ies_files']:
         st.markdown("#### IES Derived Values")
         base_values = [
             {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}", "Tooltip": get_tooltip("Total Lumens")},
-            {"Description": "Efficacy (lm/W)", "Value": f"{base_lm_per_watt:.1f}", "Tooltip": get_tooltip("Efficacy (lm/W)")},
+            {"Description": "Efficacy (lm/W)", "Value": f"{base_lm_per_watt:.1f}", "Tooltip": get_tooltip("Efficacy (lm/W) ")},
             {"Description": "Lumens per Meter", "Value": f"{base_lm_per_m:.1f}", "Tooltip": get_tooltip("Lumens per Meter")},
             {"Description": "Default Tier / Chip", "Value": f"Core / {build_data.loc['Chip_Name', default_tier]}", "Tooltip": get_tooltip("Default Tier / Chip")},
             {"Description": "Max LED Load (mA)", "Value": f"{build_data.loc['LED_Load_(mA)', default_tier]:.1f}", "Tooltip": get_tooltip("Max LED Load (mA)")},
