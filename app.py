@@ -174,8 +174,8 @@ if st.session_state['ies_files']:
     base_lm_per_m = round(calculated_lumens / length_m, 1) if length_m > 0 else 0
 
     build_data = st.session_state['dataset']['Build_Data']
-    default_tier_row = build_data.iloc[:, 1]  # Example extraction from Build_Data
-    default_chip_name = build_data.columns[1]  # Example extraction from header
+    build_data = build_data.set_index('Description')
+    default_tier = 'V1'  # You can adjust based on user selection later
 
     with st.expander("📏 Parameters + Metadata + Derived Values", expanded=False):
         meta_dict = {line.split(']')[0] + "]": line.split(']')[-1].strip() for line in header_lines if ']' in line}
@@ -196,11 +196,11 @@ if st.session_state['ies_files']:
             {"Description": "Total Lumens", "Value": f"{calculated_lumens:.1f}", "Tooltip": get_tooltip("Total Lumens")},
             {"Description": "Efficacy (lm/W)", "Value": f"{base_lm_per_watt:.1f}", "Tooltip": get_tooltip("Efficacy (lm/W)")},
             {"Description": "Lumens per Meter", "Value": f"{base_lm_per_m:.1f}", "Tooltip": get_tooltip("Lumens per Meter")},
-            {"Description": "Default Tier / Chip", "Value": f"Core / {default_chip_name}", "Tooltip": get_tooltip("Default Tier / Chip")},
-            {"Description": "Max LED Load (mA)", "Value": f"{default_tier_row['LED_Load_(mA)']:.1f}", "Tooltip": get_tooltip("Max LED Load (mA)")},
-            {"Description": "LED Pitch (mm)", "Value": f"{default_tier_row['LED_Group_Pitch_(mm)']:.1f}", "Tooltip": get_tooltip("LED Pitch (mm)")},
-            {"Description": "Actual LED Current (mA)", "Value": f"{(input_watts / 3) * 1000:.1f}", "Tooltip": get_tooltip("Actual LED Current (mA)")},
-            {"Description": "TM30 Code", "Value": f"{default_tier_row['TM30-report_No.']}", "Tooltip": get_tooltip("TM30 Code")}
+            {"Description": "Default Tier / Chip", "Value": f"Core / {build_data.loc['Chip_Name', default_tier]}", "Tooltip": get_tooltip("Default Tier / Chip")},
+            {"Description": "Max LED Load (mA)", "Value": f"{build_data.loc['LED_Load_(mA)', default_tier]:.1f}", "Tooltip": get_tooltip("Max LED Load (mA)")},
+            {"Description": "LED Pitch (mm)", "Value": f"{build_data.loc['LED_Group_Pitch_(mm)', default_tier]:.1f}", "Tooltip": get_tooltip("LED Pitch (mm)")},
+            {"Description": "Actual LED Current (mA)", "Value": f"{(input_watts / build_data.loc['Vf_(Volts)', default_tier]) * 1000:.1f}", "Tooltip": get_tooltip("Actual LED Current (mA)")},
+            {"Description": "TM30 Code", "Value": f"{build_data.loc['TM30-report_No.', default_tier]}", "Tooltip": get_tooltip("TM30 Code")}
         ]
         st.table(pd.DataFrame(base_values))
 
