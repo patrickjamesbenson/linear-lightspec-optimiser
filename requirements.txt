@@ -2,3 +2,4 @@ streamlit
 pandas
 numpy
 openpyxl
+pip install gsheetsdb
