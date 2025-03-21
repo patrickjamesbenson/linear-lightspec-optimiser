@@ -188,8 +188,8 @@ if st.session_state['ies_files']:
         st.table(pd.DataFrame.from_dict(meta_dict, orient='index', columns=['Value']))
 
         st.markdown("#### IES Parameters")
-        photometric_table = 
-            {"Description": "Lamps", "Value": f"{photometric_params[0]}", "Tooltip": get_tooltip("Lamps")},
+        photometric_table = [
+                        {"Description": "Lamps", "Value": f"{photometric_params[0]}", "Tooltip": get_tooltip("Lamps")},
             {"Description": "Lumens/Lamp", "Value": f"{photometric_params[1]}", "Tooltip": get_tooltip("Lumens/Lamp")},
             {"Description": "Candela Mult.", "Value": f"{photometric_params[2]}", "Tooltip": get_tooltip("Candela Mult.")},
             {"Description": "Vert Angles", "Value": f"{photometric_params[3]}", "Tooltip": get_tooltip("Vert Angles")},
@@ -201,8 +201,8 @@ if st.session_state['ies_files']:
             {"Description": "Height (m)", "Value": f"{photometric_params[9]}", "Tooltip": get_tooltip("Height (m)")},
             {"Description": "Ballast Factor", "Value": f"{photometric_params[10]}", "Tooltip": get_tooltip("Ballast Factor")},
             {"Description": "Future Use", "Value": f"{photometric_params[11]}", "Tooltip": get_tooltip("Future Use")},
-            {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}", "Tooltip": get_tooltip("Input Watts [F]")}
-            
+            {"Description": "Input Watts [F]", "Value": f"{photometric_params[12]}", "Tooltip": get_tooltip("Input Watts [F]")},
+        ]
         st.table(pd.DataFrame(photometric_table))
 
         st.markdown("#### IES Derived Values")
